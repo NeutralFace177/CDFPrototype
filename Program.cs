@@ -5,12 +5,13 @@ using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using System.Reflection.Metadata;
 using System.Xml.Linq;
+using System.Numerics;
 
 public class Program
 {
     public static void Main()
     {
-        Window window = new Window(800,800,"Sigma");
+        Window window = new Window(2000,1200,"Sigma");
         window.Run();
     }
 }
@@ -20,9 +21,9 @@ public class Window : GameWindow
     float[] vertices =
     {
         1f, 1f,  1, 1,
-        -1f,1f,  -1,1,
-        -1f,-1f, -1,-1,
-        1f, -1f, 1, -1
+        -1f,1f,  0,1,
+        -1f,-1f, 0,0,
+        1f, -1f, 1, 0
     };
 
     int vertexBufferObject; 
@@ -33,18 +34,24 @@ public class Window : GameWindow
 
     public Window(int width, int height, string title) : base(GameWindowSettings.Default, new NativeWindowSettings() { ClientSize = (width, height), Title = title })
     {
-        textureData = new float[800 * 800];
+        /*Vector3[] arr = Class1.Func(700,700);
+        textureData = new float[arr.Length * 3];
+        StreamWriter sw = new StreamWriter("C:\\Users\\Jacob\\Downloads\\TWOBLACKHOLESFROMMATH3.txt");
+        for (int i = 0; i < arr.Length; i++)
+        {
+            textureData[i * 3] = arr[i].X/255f; 
+            textureData[i * 3 + 1] = arr[i].Y / 255f;
+            textureData[i * 3 + 2] = arr[i].Z/255f;
+            sw.WriteLine("[" + arr[i].X + "," + arr[i].Y + "," + arr[i].Z + "],");
+        }
+        sw.Close();
+        */
+        textureData = new float[width * height];
     }
 
     protected override void OnLoad()
     {
         base.OnLoad();
-
-        for (int i = 0; i < 800 * 800; i++)
-        {
-            textureData[i] = (((float)i) / 1000.0f) % 1.0f;
-            //Console.WriteLine((((float)i) / 1000.0f) % 1.0f);
-        }
 
         shader = new Shader("shaders/vert.glsl", "shaders/frag.glsl");
         textureHandle = GL.GenTexture();
@@ -69,7 +76,7 @@ public class Window : GameWindow
         GL.UseProgram(shader.handle);
         GL.Uniform1(GL.GetUniformLocation(shader.handle, "texture1"), 0);
 
-        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.R32f, 800, 800, 0, PixelFormat.Red,PixelType.Float, textureData);
+        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb32f, 700, 700, 0, PixelFormat.Rgb,PixelType.Float, textureData);
 
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
