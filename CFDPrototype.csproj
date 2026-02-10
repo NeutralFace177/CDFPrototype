@@ -17,6 +17,9 @@
 
 	<ItemGroup>
 		<None Update="Shaders\frag.glsl">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="Shaders\goofyFRAG.glsl">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 		<None Update="Shaders\vert.glsl">

@@ -1,0 +1,22 @@
+﻿#version 400 core
+out vec4 FragColor;
+in vec2 vertexUV;
+
+uniform sampler2D texture1;
+
+void main()
+
+    FragColor = vec4(texture(texture1).xyz, 1.0);
+}
+
+
+
+
+
+
+
+
+
+
+
+
