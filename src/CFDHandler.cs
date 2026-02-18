@@ -6,16 +6,6 @@ using System.Threading.Tasks;
 
 namespace CFDPrototype
 {
-    struct Cell
-    {
-        int[] vertexIndices;
-        float u;
-        float v;
-        float p;
-        float d;
-    }
-
-
     internal class CFDHandler
     {
     }

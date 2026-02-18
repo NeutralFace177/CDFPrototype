@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Numerics;
 
-namespace CDFPrototype
+namespace CFDPrototype
 {
     internal class Class1
     {

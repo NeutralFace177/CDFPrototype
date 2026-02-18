@@ -1,11 +1,12 @@
-﻿using CDFPrototype;
-using OpenTK.Graphics.OpenGL4;
+﻿using OpenTK.Graphics.OpenGL4;
 using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using System.Reflection.Metadata;
 using System.Xml.Linq;
 using System.Numerics;
+using CFDPrototype.util;
+using CFDPrototype;
 
 public class Program
 {
@@ -46,6 +47,10 @@ public class Window : GameWindow
         }
         sw.Close();
         */
+        float[,] a = { { 5.0f, 4.0f , 3.0f}, { 9.0f, 6.0f , 1.0f} , { 7.0f, 8.0f, 2.0f} };
+        Matrix sigma = new Matrix(a);
+        Console.WriteLine(sigma.ToString());
+        Console.WriteLine(sigma.SwapColumn(1,3));
         textureData = new float[width * height];
     }
 
