@@ -50,15 +50,25 @@ public class Window : GameWindow
         float[,] a = { { 5.0f, 4.0f , 3.0f}, { 9.0f, 6.0f , 1.0f} , { 7.0f, 8.0f, 2.0f} };
         Matrix sigma = new Matrix(a);
         Console.WriteLine(sigma.ToString());
-        Console.WriteLine(sigma.SwapColumn(1,3));
-        textureData = new float[width * height];
+        Console.WriteLine(sigma.SwapColumn(1, 3));
+        textureData = new float[width * height*3];
+        Grid grid = new Grid(width, height);
+        for (int i = 0; i < width; i++)
+        {
+            for (int j = 0; j < height; j++)
+            {
+                textureData[(width * j + i) * 3] = grid.cells[i][j].u;
+                textureData[(width * j + i) * 3 + 1] = grid.cells[i][j].v;
+                textureData[(width * j + i) * 3 + 2] = 0;
+            }
+        }
     }
 
     protected override void OnLoad()
     {
         base.OnLoad();
 
-        shader = new Shader("shaders/vert.glsl", "shaders/frag.glsl");
+        shader = new Shader("Shaders/vert.glsl", "Shaders/frag.glsl");
         textureHandle = GL.GenTexture();
 
         vertexBufferObject = GL.GenBuffer();
@@ -81,7 +91,7 @@ public class Window : GameWindow
         GL.UseProgram(shader.handle);
         GL.Uniform1(GL.GetUniformLocation(shader.handle, "texture1"), 0);
 
-        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb32f, 700, 700, 0, PixelFormat.Rgb,PixelType.Float, textureData);
+        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb32f, 2000, 1200, 0, PixelFormat.Rgb,PixelType.Float, textureData);
 
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);

@@ -16,10 +16,16 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Update="Shaders\frag.glsl">
+	  <Reference Include="alglib407gpl_net5simd">
+	    <HintPath>..\..\..\Downloads\alglib-4.07.0.csharp.gpl\alglib-csharp\lib-csharp-core\alglib407gpl_net5simd.dll</HintPath>
+	  </Reference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Update="Shaders\class1frag.glsl">
 		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Update="Shaders\goofyFRAG.glsl">
+		<None Update="Shaders\frag.glsl">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 		<None Update="Shaders\vert.glsl">
