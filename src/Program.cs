@@ -22,7 +22,7 @@ public class Window : GameWindow
 {
     float[] vertices =
     {
-        1f, 1f,  1, 1,  
+        1f, 1f,  1, 1,
         -1f,1f,  0,1,
         -1f,-1f, 0,0,
         1f, -1f, 1, 0
@@ -32,8 +32,6 @@ public class Window : GameWindow
     int vertexArrayObject;
     private Shader shader;
     int textureHandle;
-    int textureHandle1;
-    int textureHandle2;
     float[] textureData;
     Grid grid;
     int gWidth;
@@ -59,8 +57,8 @@ public class Window : GameWindow
         Console.WriteLine(sigma.ToString());
         Console.WriteLine(sigma.SwapColumn(1, 3));
         textureData = new float[width * height*3];
-        gWidth = 200;
-        gHeight = 120;
+        gWidth = 800;
+        gHeight = 480;
         grid = new Grid(gWidth, gHeight);
         zuh = 0;
         for (int i = 0; i < gWidth; i++)
@@ -94,8 +92,6 @@ public class Window : GameWindow
 
         shader = new Shader("Shaders/vert.glsl", "Shaders/frag.glsl");
         textureHandle = GL.GenTexture();
-        textureHandle1 = GL.GenTexture();
-        textureHandle2 = GL.GenTexture();
 
         vertexBufferObject = GL.GenBuffer();
 
@@ -108,38 +104,22 @@ public class Window : GameWindow
         GL.EnableVertexAttribArray(0);
 
         GL.EnableVertexAttribArray(1);
-        GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), 2 * sizeof(float));;
+        GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), 2 * sizeof(float));
+        GL.BindTexture(TextureTarget.Texture2D, 1);
 
-        //tex1
         GL.ActiveTexture(TextureUnit.Texture0);
         GL.BindTexture(TextureTarget.Texture2D, textureHandle);
+
         GL.UseProgram(shader.handle);
         GL.Uniform1(GL.GetUniformLocation(shader.handle, "texture1"), 0);
-        GL.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
-        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.R32f, gWidth, gHeight, 0, PixelFormat.Red, PixelType.Float, grid.u);
+
+        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb32f, gWidth, gHeight, 0, PixelFormat.Rgb,PixelType.Float, textureData);
 
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
+        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
 
-        //tex2
-        GL.ActiveTexture(TextureUnit.Texture1);
-        GL.BindTexture(TextureTarget.Texture2D, textureHandle1);
-        GL.Uniform1(GL.GetUniformLocation(shader.handle, "texture2"), 1);
-        GL.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
-        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.R32f, gWidth, gHeight, 0, PixelFormat.Red, PixelType.Float, grid.v);
-
-        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
-        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
-
-        //tex3
-        GL.ActiveTexture(TextureUnit.Texture2);
-        GL.BindTexture(TextureTarget.Texture2D, textureHandle2);
-        GL.Uniform1(GL.GetUniformLocation(shader.handle, "texture3"), 2);
-        GL.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
-        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.R32f, gWidth, gHeight, 0, PixelFormat.Red, PixelType.Float, grid.d);
-
-        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
-        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
         shader.Use();
     }
 
@@ -157,22 +137,7 @@ public class Window : GameWindow
         shader.Use();
         GL.BindVertexArray(vertexArrayObject);
         GL.ActiveTexture(TextureUnit.Texture0);
-        GL.BindTexture(TextureTarget.Texture2D, textureHandle);
-        GL.Uniform1(GL.GetUniformLocation(shader.handle, "texture1"), 0);
-        GL.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
-        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.R32f, gWidth, gHeight, 0, PixelFormat.Red, PixelType.Float, grid.u);
-
-        GL.ActiveTexture(TextureUnit.Texture1);
-        GL.BindTexture(TextureTarget.Texture2D, textureHandle1);
-        GL.Uniform1(GL.GetUniformLocation(shader.handle, "texture2"), 1);
-        GL.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
-        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.R32f, gWidth, gHeight, 0, PixelFormat.Red, PixelType.Float, grid.v);
-
-        GL.ActiveTexture(TextureUnit.Texture2);
-        GL.BindTexture(TextureTarget.Texture2D, textureHandle2);
-        GL.Uniform1(GL.GetUniformLocation(shader.handle, "texture3"), 2);
-        GL.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
-        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.R32f, gWidth, gHeight, 0, PixelFormat.Red, PixelType.Float, grid.d);
+        GL.BindTexture(TextureTarget.Texture2D, 1);
         GL.DrawArrays(PrimitiveType.TriangleFan, 0, 4);
 
         SwapBuffers();
@@ -189,5 +154,18 @@ public class Window : GameWindow
         zuh++;
         Console.WriteLine("t"+zuh);
         grid.TimeStep(0.1f);
+        if (0 == 0)
+        {
+            for (int i = 0; i < gWidth; i++)
+            {
+                for (int j = 0; j < gHeight; j++)
+                {
+                    textureData[(gWidth * j + i) * 3] = grid.u[i, j];
+                    textureData[(gWidth * j + i) * 3 + 1] = grid.v[i, j];
+                    textureData[(gWidth * j + i) * 3 + 2] = grid.d[i, j] / 2f;
+                }
+            }
+        }
+        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb32f, gWidth, gHeight, 0, PixelFormat.Rgb, PixelType.Float, textureData);
     }
 }
