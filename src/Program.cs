@@ -57,8 +57,8 @@ public class Window : GameWindow
         Console.WriteLine(sigma.ToString());
         Console.WriteLine(sigma.SwapColumn(1, 3));
         textureData = new float[width * height*3];
-        gWidth = 800;
-        gHeight = 480;
+        gWidth = 300;
+        gHeight = 180;
         grid = new Grid(gWidth, gHeight);
         zuh = 0;
         for (int i = 0; i < gWidth; i++)
@@ -152,17 +152,17 @@ public class Window : GameWindow
     protected override void OnUpdateFrame(FrameEventArgs e)
     {
         zuh++;
-        Console.WriteLine("t"+zuh);
-        grid.TimeStep(0.1f);
+        Console.WriteLine("step:"+zuh + " t:" + zuh*0.005f);
+        grid.TimeStep(0.005f);
         if (0 == 0)
         {
             for (int i = 0; i < gWidth; i++)
             {
                 for (int j = 0; j < gHeight; j++)
                 {
-                    textureData[(gWidth * j + i) * 3] = grid.u[i, j];
-                    textureData[(gWidth * j + i) * 3 + 1] = grid.v[i, j];
-                    textureData[(gWidth * j + i) * 3 + 2] = grid.d[i, j] / 2f;
+                    textureData[(gWidth * j + i) * 3] = grid.u[i, j] / 3.5f;
+                    textureData[(gWidth * j + i) * 3 + 1] = grid.v[i, j] / 3.5f;
+                    textureData[(gWidth * j + i) * 3 + 2] = grid.d[i, j] / 3.5f;
                 }
             }
         }
