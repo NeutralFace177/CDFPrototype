@@ -152,7 +152,7 @@ public class Window : GameWindow
     protected override void OnUpdateFrame(FrameEventArgs e)
     {
         zuh++;
-        Console.WriteLine("step:"+zuh + " t:" + zuh* 0.0006f + "                fps:" + 1/e.Time);
+        Console.WriteLine("step:" + zuh + " t:" + (zuh * 0.0006f).ToString("0.000") + "                fps:" + (1 / e.Time).ToString("#.#"));
         grid.TimeStep(0.0006f);
         if (0 == 0)
         {
@@ -160,9 +160,13 @@ public class Window : GameWindow
             {
                 for (int j = 0; j < gHeight; j++)
                 {
-                    textureData[(gWidth * j + i) * 3] = (float)Math.Sqrt(grid.u[i, j] * grid.u[i,j] + grid.v[i, j] * grid.v[i, j]);
-                    textureData[(gWidth * j + i) * 3 + 1] = grid.e[i,j] / 50f;
-                    textureData[(gWidth * j + i) * 3 + 2] = grid.d[i, j] / 2.5f;
+                      textureData[(gWidth * j + i) * 3] = (float)Math.Sqrt(grid.u[i, j] * grid.u[i,j] + grid.v[i, j] * grid.v[i, j]);
+                    //  textureData[(gWidth * j + i) * 3 + 1] = grid.e[i,j] / 50f;
+                     // textureData[(gWidth * j + i) * 3 + 2] = grid.d[i, j] / 2.5f;
+
+                    textureData[(gWidth * j + i) * 3] = grid.S[i, j];
+                    textureData[(gWidth * j + i) * 3 + 1] = 0.2f;
+                 //   textureData[(gWidth * j + i) * 3 + 2] = 1f - grid.S[i,j];
                 }
             }
         }

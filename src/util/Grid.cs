@@ -83,8 +83,8 @@ namespace CFDPrototype.util
         public float[,] TxyA;
         public float[,] TyyA;
         float[,] qx,qy;
-        float[,] T;
-        bool[,] pC, qC, TC, tensorC;
+        float[,] T, SDx, SDy;
+        bool[,] pC, qC, TC, tensorC, SDC;
         float dx = 0.25f;
         float dy = 0.25f;
         int unsetValue = 0b0_11111111_10101010101010101010101;
@@ -114,6 +114,9 @@ namespace CFDPrototype.util
             qC = new bool[width + 2, height + 2];
             T = new float[width + 2, height + 2];
             TC = new bool[width + 2, height + 2];
+            SDx = new float[width + 2, height + 2];
+            SDy = new float[width + 2, height + 2];
+            SDC = new bool[width + 2, height + 2];
             for (int i = 0; i < width; i++)
             {
                 for (int j = 0; j < height; j++)
@@ -149,11 +152,11 @@ namespace CFDPrototype.util
                     }
 
                     cells[i,j] = new Cell2D(i, j);
-                    u[i,j] = 1f*(float)Math.Pow(Math.Sin(Math.PI * i / width),50)* (float)Math.Pow(Math.Sin(Math.PI * j / height), 50);
-                    v[i,j] = 1f*(float)Math.Pow(Math.Sin(Math.PI * j / height),50)* (float)Math.Pow(Math.Sin(Math.PI * i / width), 50);
+                    u[i, j] = (float)((1f - Math.Pow(Math.Cos(Math.PI * i / width), 4)) * (1f - Math.Pow(Math.Cos(Math.PI * j / height), 4)) * Math.Sin(Math.PI * j / (0.5f*height)));
+                    v[i, j] = 0;
                     d[i,j] = 1.293f;
                     e[i,j] = 0.718f * 30f + 0.5f*((float)Math.Pow(u[i,j], 2) + (float)Math.Pow(v[i,j], 2));
-                    S[i, j] = (float)Math.Sin(Math.PI * i / (2f * width));
+                    S[i, j] = (float)i / (float)width;
                 }
             }
         }
@@ -290,7 +293,7 @@ namespace CFDPrototype.util
                     case VT.T:
                         return e[Math.Clamp(i, 0, width - 1), Math.Clamp(j, 0, height - 1)]/0.718f;
                     case VT.S:
-                        return 0;
+                        return S[Math.Clamp(i, 0, width - 1), Math.Clamp(j, 0, height - 1)];
                     default:
                         return System.Runtime.CompilerServices.Unsafe.As<int, float>(ref noValIDSet);
 
@@ -318,7 +321,7 @@ namespace CFDPrototype.util
                             case VT.T:
                                 return e[i,j]/0.718f;
                             case VT.S:
-                                return 0;
+                                return S[i,j];
                             default:
                                 return System.Runtime.CompilerServices.Unsafe.As<int, float>(ref noValIDSet);
 
@@ -347,7 +350,7 @@ namespace CFDPrototype.util
                             case VT.T:
                                 return e[i,j]/0.718f;
                             case VT.S:
-                                return 0;
+                                return S[i,j];
                             default:
                                 return System.Runtime.CompilerServices.Unsafe.As<int, float>(ref noValIDSet);
                         }
@@ -379,18 +382,23 @@ namespace CFDPrototype.util
                 uDy = (v[Math.Clamp(i, 0, width - 1), Math.Clamp(j, 0, height - 1)] < 0) ? (BC(u, i, j, VT.u, Dim.y, 1) - BC(u, i, j, VT.u, Dim.y, 0)) / dy : (BC(u, i, j, VT.u, Dim.y, 0) - BC(u, i, j, VT.u, Dim.y, -1)) / dy;
                 vDx = (u[Math.Clamp(i, 0, width - 1), Math.Clamp(j, 0, height - 1)] < 0) ? (BC(v, i, j, VT.v, Dim.x, 1) - BC(v, i, j, VT.v, Dim.x, 0)) / dx : (BC(v, i, j, VT.v, Dim.x, 0) - BC(v, i, j, VT.v, Dim.x, -1)) / dx;
                 vDy = (v[Math.Clamp(i, 0, width - 1), Math.Clamp(j, 0, height - 1)] < 0) ? (BC(v, i, j, VT.v, Dim.y, 1) - BC(v, i, j, VT.v, Dim.y, 0)) / dy : (BC(v, i, j, VT.v, Dim.y, 0) - BC(v, i, j, VT.v, Dim.y, -1)) / dy;
-
-                divU = uDx + vDy;
             }//todo: add check for if value has already been calculated this timestep 
-            else if (true)
+            else if (i == 0 || j == 0 || i == width-1 || j == height-1)
             {
                 uDx = (u[i, j] < 0) ? (BC(u, i, j, VT.u, Dim.x, 1) - u[i, j]) / dx : (u[i, j] - BC(u, i, j, VT.u, Dim.x, -1)) / dx;
                 uDy = (v[i, j] < 0) ? (BC(u, i, j, VT.u, Dim.y, 1) - u[i, j]) / dy : (u[i, j] - BC(u, i, j, VT.u, Dim.y, -1)) / dy;
                 vDx = (u[i, j] < 0) ? (BC(v, i, j, VT.v, Dim.x, 1) - v[i, j]) / dx : (v[i, j] - BC(v, i, j, VT.v, Dim.x, -1)) / dx;
                 vDy = (v[i, j] < 0) ? (BC(v, i, j, VT.v, Dim.y, 1) - v[i, j]) / dy : (v[i, j] - BC(v, i, j, VT.v, Dim.y, -1)) / dy;
-                //∇*u
-                divU = uDx + vDy;
+            } else
+            {
+                uDx = (u[i, j] < 0) ? (u[i+1,j] - u[i, j]) / dx : (u[i, j] - u[i-1,j]) / dx;
+                uDy = (v[i, j] < 0) ? (u[i,j+1] - u[i, j]) / dy : (u[i, j] - u[i,j-1]) / dy;
+                vDx = (u[i, j] < 0) ? (v[i+1,j] - v[i, j]) / dx : (v[i, j] - v[i-1,j]) / dx;
+                vDy = (v[i, j] < 0) ? (v[i,j+1] - v[i, j]) / dy : (v[i, j] - v[i,j-1]) / dy;
             }
+            //∇*u
+            divU = uDx + vDy;
+
             TxxA[ti, tj] = ((2f / 3f) * 0.0000186f) * divU + 2f * 0.0000186f * uDx;
             TyyA[ti, tj] = ((2f / 3f) * 0.0000186f) * divU + 2f * 0.0000186f * vDy;
             TxyA[ti, tj] = 0.0000186f * (uDy + vDx);
@@ -475,6 +483,34 @@ namespace CFDPrototype.util
             qC[ti, tj] = true;
         }
 
+        void calcSGradient(int i, int j)
+        {
+            int ti = i + 1;
+            int tj = j + 1;
+            if (SDC[ti,tj])
+            {
+                return;
+            }
+            float sdx;
+            float sdy;
+            if ((i < 0 || i >= width || j < 0 || j >= height))
+            {
+                sdx = (u[Math.Clamp(i, 0, width - 1), Math.Clamp(j, 0, height - 1)] < 0) ? (BC(S, i, j, VT.S, Dim.x, 1) - BC(S, i, j, VT.S, Dim.x, 0)) / dx : (BC(S, i, j, VT.S, Dim.x, 0) - BC(S, i, j, VT.S, Dim.x, -1)) / dx;
+                sdy = (v[Math.Clamp(i, 0, width - 1), Math.Clamp(j, 0, height - 1)] < 0) ? (BC(S, i, j, VT.S, Dim.y, 1) - BC(S, i, j, VT.S, Dim.y, 0)) / dy : (BC(S, i, j, VT.S, Dim.y, 0) - BC(S, i, j, VT.S, Dim.y, -1)) / dy;
+            } else if (i == 0 || j == 0 || i == width - 1 || j == height - 1)
+            {
+                sdx = (u[i, j] < 0) ? (BC(S, i, j, VT.S, Dim.x, 1) - S[i, j]) / dx : (S[i, j] - BC(S, i, j, VT.S, Dim.x, -1)) / dx;
+                sdy = (v[i, j] < 0) ? (BC(S, i, j, VT.S, Dim.y, 1) - S[i, j]) / dy : (S[i, j] - BC(S, i, j, VT.S, Dim.y, -1)) / dy;
+            } else
+            {
+                sdx = (u[i, j] < 0) ? (S[i + 1, j] - S[i, j]) / dx : (S[i, j] - S[i - 1, j]) / dx;
+                sdy = (v[i, j] < 0) ? (S[i, j + 1] - S[i, j]) / dy : (S[i, j] - S[i, j - 1]) / dy;
+            }
+            SDx[ti, tj] = sdx;
+            SDy[ti, tj] = sdy;
+            SDC[ti, tj] = true;
+        }
+
         public void TimeStep(float dt)
         {
             float[,] nd = new float[width, height];
@@ -520,6 +556,12 @@ namespace CFDPrototype.util
                     calcHeatFlux(i - 1, j);
                     calcHeatFlux(i, j + 1);
                     calcHeatFlux(i, j - 1);
+
+                    calcSGradient(i, j);
+                    calcSGradient(i + 1, j);
+                    calcSGradient(i - 1, j);
+                    calcSGradient(i, j + 1);
+                    calcSGradient(i, j - 1);
 
                     int ti = i + 1;
                     int tj = j + 1;
@@ -587,8 +629,17 @@ namespace CFDPrototype.util
                     float vYFC = CD(v, i, j, VT.v, Dim.y, true);
                     float vYBC = CD(v, i, j, VT.v, Dim.y, false);
                     */
-                    float SDx = 0;
-                    float SDy = 0;
+
+                    float SXF = CD(S, i, j, VT.S, Dim.x, true);
+                    float SXB = CD(S, i, j, VT.S, Dim.x, false);
+                    float SYF = CD(S, i, j, VT.S, Dim.y, true);
+                    float SYB = CD(S, i, j, VT.S, Dim.y, false);
+
+                    float SDxXF = (SDx[ti, tj] + SDx[ti + 1, tj]) / 2f;
+                    float SDxXB = (SDx[ti, tj] + SDx[ti - 1, tj]) / 2f;
+
+                    float SDyYF = (SDy[ti, tj] + SDy[ti, tj + 1]) / 2f;
+                    float SDyYB = (SDy[ti, tj] + SDy[ti, tj - 1]) / 2f;
 
                     //lazy schmazy calculations for dx are left out rn
                     nd[i, j] += dt * (-(dXF * uXF - dXB * uXB) / dx - (dYF * vYF - dYB * vYB) / dy);
@@ -601,6 +652,7 @@ namespace CFDPrototype.util
                      - (vYF * (dYF * FOU(e, i, j, VT.E, Dim.y, true) + pressureToggle * pYFC) - vYB * (dYB * FOU(e, i, j, VT.E, Dim.y, false) + pressureToggle * pYBC)) / dy
                      +((uXF * TxxXF + vXF * TxyXF - qxXF) - (uXB * TxxXB + vXB * TxyXB - qxXB)) / dx
                      + ((uYF * TxyYF + vYF * TyyYF - qyYF) - (uYB * TxyYB + vYB * TyyYB - qyYB)) / dy);
+                    nS[i, j] += (1f / nd[i, j]) * dt * (-(dXF * uXF * SXF - dXB * uXB * SXB) / dx - (dYF * vYF * SYF - dYB * vYB * SYB) / dy + 0.05f*(SDxXF - SDxXB) / dx + 0.05f*(SDyYF - SDyYB) / dy); 
 
                     //+ visc terms and oressyre graduebt;
                     if (float.IsNaN(nd[i,j]) || float.IsInfinity(nd[i,j]))
@@ -617,10 +669,11 @@ namespace CFDPrototype.util
                     }
                 }
             }
-            Array.Copy(nd, 0, d, 0, width*height);
-            Array.Copy(nu, 0, u, 0, width*height);
+            Array.Copy(nd, 0, d, 0, width * height);
+            Array.Copy(nu, 0, u, 0, width * height);
             Array.Copy(nv, 0, v, 0, width * height);
             Array.Copy(ne, 0, e, 0, width * height);
+            Array.Copy(nS, 0, S, 0, width * height);
         }
     }
 }
