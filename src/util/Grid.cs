@@ -14,7 +14,8 @@ namespace CFDPrototype.util
         v,
         w,
         E,
-        T
+        T,
+        S
     }
 
     enum Dim
@@ -75,7 +76,7 @@ namespace CFDPrototype.util
     {
         Vector2[] vertices;
         public Cell2D[,] cells;
-        public float[,] u, v, p, d, e;
+        public float[,] u, v, p, d, e, S;
         int width;
         int height;
         public float[,] TxxA;
@@ -83,8 +84,9 @@ namespace CFDPrototype.util
         public float[,] TyyA;
         float[,] qx,qy;
         float[,] T;
-        float dx = 0.1f;
-        float dy = 0.1f;
+        bool[,] pC, qC, TC, tensorC;
+        float dx = 0.25f;
+        float dy = 0.25f;
         int unsetValue = 0b0_11111111_10101010101010101010101;
         int noValIDSet = 0b0_11111111_11111000000000000011111;
         int pressureToggle = 1;
@@ -100,13 +102,18 @@ namespace CFDPrototype.util
             v = new float[width, height];
             d = new float[width, height];
             e = new float[width, height];
+            S = new float[width, height];
             p = new float[width + 2, height + 2];
+            pC = new bool[width + 2, height + 2];
             TxxA = new float[width + 2, height + 2];
             TxyA = new float[width + 2, height + 2];
             TyyA = new float[width + 2, height + 2];
+            tensorC = new bool[width + 2, height + 2];
             qx = new float[width + 2, height + 2];
             qy = new float[width + 2, height + 2];
+            qC = new bool[width + 2, height + 2];
             T = new float[width + 2, height + 2];
+            TC = new bool[width + 2, height + 2];
             for (int i = 0; i < width; i++)
             {
                 for (int j = 0; j < height; j++)
@@ -142,10 +149,11 @@ namespace CFDPrototype.util
                     }
 
                     cells[i,j] = new Cell2D(i, j);
-                    u[i,j] = 3f*(float)Math.Sin(Math.PI * i / width);
-                    v[i,j] = 3f*(float)Math.Sin(Math.PI * j / height);
+                    u[i,j] = 1f*(float)Math.Pow(Math.Sin(Math.PI * i / width),50)* (float)Math.Pow(Math.Sin(Math.PI * j / height), 50);
+                    v[i,j] = 1f*(float)Math.Pow(Math.Sin(Math.PI * j / height),50)* (float)Math.Pow(Math.Sin(Math.PI * i / width), 50);
                     d[i,j] = 1.293f;
-                    e[i,j] = 0.718f * 16f + 0.5f*((float)Math.Pow(u[i,j], 2) + (float)Math.Pow(v[i,j], 2));
+                    e[i,j] = 0.718f * 30f + 0.5f*((float)Math.Pow(u[i,j], 2) + (float)Math.Pow(v[i,j], 2));
+                    S[i, j] = (float)Math.Sin(Math.PI * i / (2f * width));
                 }
             }
         }
@@ -159,7 +167,7 @@ namespace CFDPrototype.util
             return val;
         }
 
-        //1st order upwind
+        //1st order upwind --currently causes instabilities
         float FOU(float[,] field, int i, int j, VT valId, Dim dim, bool forwards)
         {
             float val;
@@ -172,8 +180,8 @@ namespace CFDPrototype.util
             }
             return val;
         }
-        
-        //second order upwind
+
+        //second order upwind --add flux limiters
         float SOU(float[,] field, int i, int j, VT valId, Dim dim, bool forwards)
         {
             float val = 0;
@@ -281,6 +289,8 @@ namespace CFDPrototype.util
                         return e[Math.Clamp(i, 0, width - 1), Math.Clamp(j, 0, height - 1)];
                     case VT.T:
                         return e[Math.Clamp(i, 0, width - 1), Math.Clamp(j, 0, height - 1)]/0.718f;
+                    case VT.S:
+                        return 0;
                     default:
                         return System.Runtime.CompilerServices.Unsafe.As<int, float>(ref noValIDSet);
 
@@ -307,6 +317,8 @@ namespace CFDPrototype.util
                                 return e[i,j];
                             case VT.T:
                                 return e[i,j]/0.718f;
+                            case VT.S:
+                                return 0;
                             default:
                                 return System.Runtime.CompilerServices.Unsafe.As<int, float>(ref noValIDSet);
 
@@ -334,6 +346,8 @@ namespace CFDPrototype.util
                                 return e[i,j];
                             case VT.T:
                                 return e[i,j]/0.718f;
+                            case VT.S:
+                                return 0;
                             default:
                                 return System.Runtime.CompilerServices.Unsafe.As<int, float>(ref noValIDSet);
                         }
@@ -350,6 +364,10 @@ namespace CFDPrototype.util
         {
             int ti = i + 1;
             int tj = j + 1;
+            if (tensorC[ti, tj])
+            {
+                return;
+            }
             float uDx = 0;
             float uDy = 0;
             float vDx = 0;
@@ -376,6 +394,7 @@ namespace CFDPrototype.util
             TxxA[ti, tj] = ((2f / 3f) * 0.0000186f) * divU + 2f * 0.0000186f * uDx;
             TyyA[ti, tj] = ((2f / 3f) * 0.0000186f) * divU + 2f * 0.0000186f * vDy;
             TxyA[ti, tj] = 0.0000186f * (uDy + vDx);
+            tensorC[ti, tj] = true;
             if (float.IsNaN(uDx) || float.IsNaN(uDy) || float.IsNaN(vDx) || float.IsNaN(vDy))
             {
               //  Console.WriteLine(System.Runtime.CompilerServices.Unsafe.As<float, int>(ref u[0, 0]));
@@ -387,36 +406,53 @@ namespace CFDPrototype.util
 
         void calcTemperature(int i, int j)
         {
+            int ti = i + 1;
+            int tj = j + 1;
+            if (TC[ti, tj])
+            {
+                return;
+            }
             float val;
             if ((i < 0 || i >= width || j < 0 || j >= height))
             {
-                val = (BC(e, i, j, VT.E, Dim.x, 0) - ((float)Math.Pow(BC(u, i, j, VT.u, Dim.x, 0), 2) + (float)Math.Pow(BC(v, i, j, VT.v, Dim.x, 0), 2))) / 0.718f;
+                val = (BC(e, i, j, VT.E, Dim.x, 0) - 0.5f*((float)Math.Pow(BC(u, i, j, VT.u, Dim.x, 0), 2) + (float)Math.Pow(BC(v, i, j, VT.v, Dim.x, 0), 2))) / 0.718f;
             } else
             {
-                val = (e[i, j] - ((float)Math.Pow(u[i, j], 2) + (float)Math.Pow(v[i, j], 2))) / 0.718f;
+                val = (e[i, j] - 0.5f*((float)Math.Pow(u[i, j], 2) + (float)Math.Pow(v[i, j], 2))) / 0.718f;
             }
-            T[i + 1, j + 1] = val;
+            T[ti, tj] = val;
+            TC[ti, tj] = true;
+
         }
 
         void calcPressure(int i, int j)
         {
             int ti = i + 1;
             int tj = j + 1;
+            if (pC[ti, tj])
+            {
+                return;
+            }
             float val;
             if ((i < 0 || i >= width || j < 0 || j >= height))
             {
-                val = BC(d, i, j, VT.d, Dim.x, 0) * 0.286f * T[i + 1, j + 1];
+                val = BC(d, i, j, VT.d, Dim.x, 0) * 0.286f * T[ti, tj];
             } else
             {
-                val = d[i, j] * 0.286f * T[i + 1, j + 1];
+                val = d[i, j] * 0.286f * T[ti, tj];
             }
             p[ti,tj] = val;
+            pC[ti, tj] = true;
         }
 
         void calcHeatFlux(int i, int j)
         {
             int ti = i + 1;
             int tj = j + 1;
+            if (qC[ti, tj])
+            {
+                return;
+            }
             float TDx;
             float TDy;
             
@@ -436,6 +472,7 @@ namespace CFDPrototype.util
 
             qx[ti, tj] = -0.02662f * TDx;
             qy[ti, tj] = -0.02662f * TDy;
+            qC[ti, tj] = true;
         }
 
         public void TimeStep(float dt)
@@ -448,6 +485,13 @@ namespace CFDPrototype.util
             Array.Copy(v, 0, nv, 0, width * height);
             float[,] ne = new float[width, height];
             Array.Copy(e, 0, ne, 0, width * height);
+            float[,] nS = new float[width, height];
+            Array.Copy(S, 0, nS, 0, width * height);
+
+            pC = new bool[width + 2, height + 2];
+            qC = new bool[width + 2, height + 2];
+            TC = new bool[width + 2, height + 2];
+            tensorC = new bool[width + 2, height + 2];
 
             for (int i = 0; i < width; i++)
             {
@@ -480,7 +524,7 @@ namespace CFDPrototype.util
                     int ti = i + 1;
                     int tj = j + 1;
 
-                    //stress dim forward/backwward face (central diff)
+                    //stress dim forward/backward face (central diff)
                     float TxxXF = (TxxA[ti, tj] + TxxA[ti + 1, tj]) / 2f;
                     float TxxXB = (TxxA[ti, tj] + TxxA[ti - 1, tj]) / 2f;
 
@@ -492,11 +536,17 @@ namespace CFDPrototype.util
                     float TyyYF = (TyyA[ti, tj] + TyyA[ti, tj + 1]) / 2f;
                     float TyyYB = (TyyA[ti, tj] + TyyA[ti, tj - 1]) / 2f;
 
-                    //pressure dim forward/backward face (upwind)
-                    float pxf = u[i, j] >= 0 ? p[ti, tj] : p[ti + 1, tj];
-                    float pxb = u[i, j] >= 0 ? p[ti - 1, tj] : p[ti, tj];
-                    float pyf = v[i, j] >= 0 ? p[ti, tj] : p[ti, tj + 1];
-                    float pyb = v[i, j] >= 0 ? p[ti, tj - 1] : p[ti, tj];
+                    /*pressure dim forward/backward face (upwind)
+                    float pXF = u[i, j] >= 0 ? p[ti, tj] : p[ti + 1, tj];
+                    float pXB = u[i, j] >= 0 ? p[ti - 1, tj] : p[ti, tj];
+                    float pYF = v[i, j] >= 0 ? p[ti, tj] : p[ti, tj + 1];
+                    float pYB = v[i, j] >= 0 ? p[ti, tj - 1] : p[ti, tj];
+                    */
+                    //central diff
+                    float pXFC = (p[ti, tj] + p[ti + 1, tj]) /2f;
+                    float pXBC = (p[ti - 1, tj] + p[ti, tj]) / 2f;
+                    float pYFC = (p[ti, tj] + p[ti, tj + 1]) / 2f;
+                    float pYBC = (p[ti, tj - 1] + p[ti, tj]) / 2f;
 
                     //heat flux dim forward/backward face (central diff)
                     float qxXF = (qx[ti, tj] + qx[ti + 1, tj]) / 2f;
@@ -504,21 +554,54 @@ namespace CFDPrototype.util
                     float qyYF = (qy[ti, tj] + qy[ti, tj + 1]) / 2f;
                     float qyYB = (qy[ti, tj] + qy[ti, tj - 1]) / 2f;
 
+                    //yuh
+                    float dXF = CD(d, i, j, VT.d, Dim.x, true);
+                    float dXB = CD(d, i, j, VT.d, Dim.x, false);
+                    float dYF = CD(d, i, j, VT.d, Dim.y, true);
+                    float dYB = CD(d, i, j, VT.d, Dim.x, false);
+                    //central
+                  //  float dXFC = CD(d, i, j, VT.d, Dim.x, true);
+                   // float dXBC = CD(d, i, j, VT.d, Dim.x, false);
+                  //  float dYFC = CD(d, i, j, VT.d, Dim.y, true);
+                  //  float dYBC = CD(d, i, j, VT.d, Dim.x, false);
+
+                    //upwind
+                    float uXF = CD(u, i, j, VT.u, Dim.x, true);
+                    float uXB = CD(u, i, j, VT.u, Dim.x, false);
+                    float uYF = CD(u, i, j, VT.u, Dim.y, true);
+                    float uYB = CD(u, i, j, VT.u, Dim.y, false);
+                    /*central
+                    float uXFC = CD(u, i, j, VT.u, Dim.x, false);
+                    float uXBC = CD(u, i, j, VT.u, Dim.x, false);
+                    float uYFC = CD(u, i, j, VT.u, Dim.y, true);
+                    float uYBC = CD(u, i, j, VT.u, Dim.y, false);
+                    */
+                    //upwind
+                    float vXF = CD(v, i, j, VT.v, Dim.x, true);
+                    float vXB = CD(v, i, j, VT.v, Dim.x, false);
+                    float vYF = CD(v, i, j, VT.v, Dim.y, true);
+                    float vYB = CD(v, i, j, VT.v, Dim.y, false);
+                    /*central
+                    float vXFC = CD(v, i, j, VT.v, Dim.x, true);
+                    float vXBC = CD(v, i, j, VT.v, Dim.x, false);
+                    float vYFC = CD(v, i, j, VT.v, Dim.y, true);
+                    float vYBC = CD(v, i, j, VT.v, Dim.y, false);
+                    */
+                    float SDx = 0;
+                    float SDy = 0;
+
                     //lazy schmazy calculations for dx are left out rn
-                    nd[i,j] -= dt * ((FOU(d,i,j,VT.d,Dim.x,true)*FOU(u, i, j, VT.u, Dim.x, true) - FOU(d, i, j, VT.d, Dim.x, false)* FOU(u, i, j, VT.u, Dim.x, false))/dx
-                        +(FOU(d, i, j, VT.d, Dim.y, true) * FOU(v, i, j, VT.v, Dim.y, true) - FOU(d, i, j, VT.d, Dim.y, false) * FOU(v, i, j, VT.v, Dim.y, false)/dy));
-                    nu[i,j] -= (1f / nd[i, j]) * dt * (((FOU(d, i, j, VT.d, Dim.x, true) * (float)Math.Pow(FOU(u, i, j, VT.u, Dim.x, true), 2)+pressureToggle*pxf) - (FOU(d, i, j, VT.d, Dim.x, false) * (float)Math.Pow(FOU(u, i, j, VT.u, Dim.x, false), 2)+0*pxb)) / dx +
-                        (FOU(d, i, j, VT.d, Dim.y, true) * FOU(u, i, j, VT.u, Dim.y, true) * FOU(v, i, j, VT.v, Dim.y, true) - FOU(d, i, j, VT.d, Dim.y, false) * FOU(u, i, j, VT.u, Dim.y, false) * FOU(v, i, j, VT.v, Dim.y, false)) / dy
-                        + (TxxXF - TxxXB)/dx +
-                        (TxyYF - TxyYB) / dy);
-                    nv[i, j] -= (1f / nd[i, j]) * dt * ((FOU(d,i,j,VT.d, Dim.x, true)*FOU(u,i,j,VT.u, Dim.x, true)*FOU(v,i,j,VT.v, Dim.x, true)-FOU(d, i, j, VT.d, Dim.x, false) * FOU(u, i, j, VT.u, Dim.x, false) * FOU(v, i, j, VT.v, Dim.x, false))/dx
-                        + ((FOU(d,i,j,VT.d, Dim.y, true)*(float)Math.Pow(FOU(v,i,j,VT.v, Dim.y, true),2f)+ pressureToggle * pyf)- (FOU(d, i, j, VT.d, Dim.y, false) * (float)Math.Pow(FOU(v, i, j, VT.v, Dim.y, false), 2f)+0*pyb)) /dy
-                        + (TxyXF - TxyXB) / dx
-                        + (TyyYF - TyyYB) / dy);
-                    ne[i, j] -= (1f / nd[i, j]) * dt * ((FOU(u, i, j, VT.u, Dim.x, true) * (FOU(d, i, j, VT.d, Dim.x, true) * FOU(e, i, j, VT.E, Dim.x, true) + pxf) - FOU(u, i, j, VT.u, Dim.x, false) * (FOU(d, i, j, VT.d, Dim.x, false) * FOU(e, i, j, VT.E, Dim.x, false) + pxb)) / dx
-                        + (FOU(v, i, j, VT.v, Dim.y, true) * (FOU(d, i, j, VT.d, Dim.y, true) * FOU(e, i, j, VT.E, Dim.y, true) + pyf) - FOU(v, i, j, VT.v, Dim.y, false) * (FOU(d, i, j, VT.d, Dim.y, false) * FOU(e, i, j, VT.E, Dim.y, false) + pyb)) / dy  
-                        + ((FOU(u,i,j,VT.u,Dim.x,true)*TxxXF+FOU(v,i,j,VT.v,Dim.x,true)*TxyXF-qxXF)- (FOU(u, i, j, VT.u, Dim.x, false) * TxxXB + FOU(v, i, j, VT.v, Dim.x, false) * TxyXB-qxXB)) /dx
-                        + ((FOU(u, i, j, VT.u, Dim.y, true) * TxyYF + FOU(v, i, j, VT.v, Dim.y, true) * TyyYF - qyYF) - (FOU(u, i, j, VT.u, Dim.y, false) * TxyYB + FOU(v, i, j, VT.v, Dim.y, false) * TyyYB - qyYB)) / dy);
+                    nd[i, j] += dt * (-(dXF * uXF - dXB * uXB) / dx - (dYF * vYF - dYB * vYB) / dy);
+                    nu[i, j] += (1f / nd[i, j]) * dt * (-((dXF * uXF * uXF + pressureToggle * pXFC) - (dXB * uXB * uXB + pressureToggle * pXBC)) / dx -
+                        (dYF * uYF * vYF - dYB * uYB * vYB) / dy + (TxxXF - TxxXB) / dx + (TxyYF - TxyYB) / dy);
+                    nv[i, j] += (1f / nd[i, j]) * dt * (-(dXF * uXF * vXF - dXB * uXB * vXB) / dx
+                        - ((dYF * vYF * vYF + pressureToggle * pYFC) - (dYB * vYB * vYB + pressureToggle * pYBC)) / dy 
+                        + (TxyXF - TxyXB) / dx + (TyyYF - TyyYB) / dy);
+                    ne[i, j] += (1f / nd[i, j]) * dt * (-(uXF * (dXF * FOU(e, i, j, VT.E, Dim.x, true) + pressureToggle * pXFC) - uXB * (dXB * FOU(e, i, j, VT.E, Dim.x, false) + pressureToggle * pXBC)) / dx
+                     - (vYF * (dYF * FOU(e, i, j, VT.E, Dim.y, true) + pressureToggle * pYFC) - vYB * (dYB * FOU(e, i, j, VT.E, Dim.y, false) + pressureToggle * pYBC)) / dy
+                     +((uXF * TxxXF + vXF * TxyXF - qxXF) - (uXB * TxxXB + vXB * TxyXB - qxXB)) / dx
+                     + ((uYF * TxyYF + vYF * TyyYF - qyYF) - (uYB * TxyYB + vYB * TyyYB - qyYB)) / dy);
+
                     //+ visc terms and oressyre graduebt;
                     if (float.IsNaN(nd[i,j]) || float.IsInfinity(nd[i,j]))
                     {
