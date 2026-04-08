@@ -7,6 +7,24 @@ using System.Numerics;
 
 namespace CFDPrototype.util
 {
+    struct Field2D
+    {
+        public float d = 0;
+        public float u = 0;
+        public float v = 0;
+        public float E = 0;
+        public float S = 0;
+
+        public Field2D(float d, float u, float v, float E, float S)
+        {
+            this.d = d;
+            this.u = u; 
+            this.v = v; 
+            this.E = E; 
+            this.S = S;
+        }
+    }
+
     enum VT
     {
         d,
@@ -152,11 +170,28 @@ namespace CFDPrototype.util
                     }
 
                     cells[i,j] = new Cell2D(i, j);
-                    u[i, j] = (float)((1f - Math.Pow(Math.Cos(Math.PI * i / width), 4)) * (1f - Math.Pow(Math.Cos(Math.PI * j / height), 4)) * Math.Sin(Math.PI * j / (0.5f*height)));
-                    v[i, j] = 0;
+                    //u[i, j] = (float)((1f - Math.Pow(Math.Cos(Math.PI * i / width), 4)) * (1f - Math.Pow(Math.Cos(Math.PI * j / height), 4)) * Math.Sin(Math.PI * j / (0.5f*height)));
+                    //v[i, j] = 0;
+                    u[i, j] = (float)(Math.Pow(Math.Sin(Math.PI * i / width),25)* Math.Pow(Math.Sin(Math.PI * j / height), 25));
+                    v[i, j] = (float)(Math.Pow(Math.Sin(Math.PI * i / width), 25) * Math.Pow(Math.Sin(Math.PI * j / height), 25));
                     d[i,j] = 1.293f;
                     e[i,j] = 0.718f * 30f + 0.5f*((float)Math.Pow(u[i,j], 2) + (float)Math.Pow(v[i,j], 2));
                     S[i, j] = (float)i / (float)width;
+                }
+            }
+        }
+
+        public void StoreToField2D(Field2D[,] field)
+        {
+            for (int i = 0; i < width; i++)
+            {
+                for (int j = 0; j < height; j++)
+                {
+                    field[i,j].d = d[i, j];
+                    field[i,j].u = u[i, j];
+                    field[i,j].v = v[i, j];
+                    field[i,j].E = e[i, j];
+                    field[i,j].S = S[i, j];
                 }
             }
         }

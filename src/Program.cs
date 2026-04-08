@@ -20,6 +20,7 @@ public class Program
 
 public class Window : GameWindow
 {
+
     float[] vertices =
     {
         1f, 1f,  1, 1,
@@ -31,7 +32,14 @@ public class Window : GameWindow
     int vertexBufferObject; 
     int vertexArrayObject;
     private Shader shader;
+    ComputeShader computeShader;
     int textureHandle;
+    int compTextureHandle;
+    Field2D[,] compShaderDataIn;
+    Field2D[,] compShaderDataOut;
+    Field2D sigmaa;
+    int ssbo;
+    int ssbo1;
     float[] textureData;
     Grid grid;
     int gWidth;
@@ -60,14 +68,18 @@ public class Window : GameWindow
         gWidth = 300;
         gHeight = 180;
         grid = new Grid(gWidth, gHeight);
+        compShaderDataIn = new Field2D[gWidth, gHeight];
+        compShaderDataOut = new Field2D[gWidth, gHeight];
+        sigmaa = new Field2D(0.1f, 0.2f, 0.3f, 0.4f, 0.5f);
+        grid.StoreToField2D(compShaderDataIn);
         zuh = 0;
         for (int i = 0; i < gWidth; i++)
         {
             for (int j = 0; j < gHeight; j++)
             {
-                textureData[(gWidth * j + i) * 3] = grid.u[i, j];
-                textureData[(gWidth * j + i) * 3 + 1] = grid.v[i, j];
-                textureData[(gWidth * j + i) * 3 + 2] = grid.d[i, j] / 2f;
+         //       textureData[(gWidth * j + i) * 3] = grid.u[i, j];
+          //      textureData[(gWidth * j + i) * 3 + 1] = grid.v[i, j];
+          //      textureData[(gWidth * j + i) * 3 + 2] = grid.d[i, j] / 2f;
             }
         }
 
@@ -86,12 +98,37 @@ public class Window : GameWindow
         return r;
     }
 
-    protected override void OnLoad()
+    unsafe protected override void OnLoad()
     {
         base.OnLoad();
 
         shader = new Shader("Shaders/vert.glsl", "Shaders/frag.glsl");
+        computeShader = new ComputeShader("Shaders/compute.glsl");
         textureHandle = GL.GenTexture();
+        compTextureHandle = GL.GenTexture();
+        GL.CreateBuffers(1, out ssbo);
+        GL.CreateBuffers(1, out ssbo1);
+        GL.BindBuffer(BufferTarget.ShaderStorageBuffer, ssbo);
+        unsafe
+        {
+            fixed (Field2D* ptr = &compShaderDataIn[0,0]) {
+                GL.BufferData(BufferTarget.ShaderStorageBuffer, compShaderDataIn.Length * sizeof(Field2D), (IntPtr)ptr, BufferUsageHint.DynamicCopy);
+            }
+        }
+
+        GL.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, 2, ssbo);
+        GL.BindBuffer(BufferTarget.ShaderStorageBuffer, 0);
+
+        GL.BindBuffer(BufferTarget.ShaderStorageBuffer, ssbo1);
+        unsafe
+        {
+            fixed (Field2D* ptr = &compShaderDataOut[0,0])
+            {
+                GL.BufferData(BufferTarget.ShaderStorageBuffer, compShaderDataOut.Length * sizeof(Field2D), (IntPtr)ptr, BufferUsageHint.DynamicRead);
+            }
+        }
+        GL.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, 3, ssbo1);
+        GL.BindBuffer(BufferTarget.ShaderStorageBuffer, 0);
 
         vertexBufferObject = GL.GenBuffer();
 
@@ -105,22 +142,26 @@ public class Window : GameWindow
 
         GL.EnableVertexAttribArray(1);
         GL.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), 2 * sizeof(float));
-        GL.BindTexture(TextureTarget.Texture2D, 1);
 
         GL.ActiveTexture(TextureUnit.Texture0);
         GL.BindTexture(TextureTarget.Texture2D, textureHandle);
-
         GL.UseProgram(shader.handle);
-        GL.Uniform1(GL.GetUniformLocation(shader.handle, "texture1"), 0);
-
+        GL.Uniform1(GL.GetUniformLocation(shader.handle, "texture1"), 1);
         GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb32f, gWidth, gHeight, 0, PixelFormat.Rgb,PixelType.Float, textureData);
-
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
 
-        shader.Use();
+        GL.ActiveTexture(TextureUnit.Texture1);
+        GL.BindTexture(TextureTarget.Texture2D, compTextureHandle);
+        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba32f, gWidth, gHeight, 0, PixelFormat.Rgba, PixelType.Float, new IntPtr());
+        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Nearest);
+        GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
+        GL.BindImageTexture(1, compTextureHandle, 0, false, 0, TextureAccess.ReadWrite, SizedInternalFormat.Rgba32f);
+
     }
 
     protected override void OnUnload()
@@ -133,11 +174,47 @@ public class Window : GameWindow
     {
         base.OnRenderFrame(e);
         GL.Clear(ClearBufferMask.ColorBufferBit);
+        GL.BindBuffer(BufferTarget.ShaderStorageBuffer, ssbo);
+        IntPtr ptr = GL.MapBuffer(BufferTarget.ShaderStorageBuffer, BufferAccess.WriteOnly);
+        unsafe
+        {
+            fixed (void* dataPtr = &compShaderDataIn[0,0])
+            {
+                System.Buffer.MemoryCopy(dataPtr, ptr.ToPointer(), compShaderDataIn.Length * sizeof(Field2D), compShaderDataIn.Length * sizeof(Field2D));
+            }
+        }
+        GL.UnmapBuffer(BufferTarget.ShaderStorageBuffer);
+        int block_index = GL.GetProgramResourceIndex(computeShader.handle, ProgramInterface.ShaderStorageBlock, "shader_data");
+        int ssbo_binding_point_index = 2;
+        GL.ShaderStorageBlockBinding(computeShader.handle, block_index, ssbo_binding_point_index);
+
+        computeShader.Use();
+        GL.DispatchCompute(gWidth, gHeight, 1);
+        GL.MemoryBarrier(MemoryBarrierFlags.ShaderStorageBarrierBit);
+
+        GL.BindBuffer(BufferTarget.ShaderStorageBuffer, ssbo1);
+        IntPtr ptr1 = GL.MapBuffer(BufferTarget.ShaderStorageBuffer, BufferAccess.ReadWrite);
+        unsafe
+        {
+            fixed (void* dataPtr = &compShaderDataOut[0,0])
+            {
+                fixed (void* dataPtr2 = &compShaderDataIn[0, 0])
+                {
+                    System.Buffer.MemoryCopy(ptr1.ToPointer(), dataPtr, compShaderDataOut.Length * sizeof(Field2D), compShaderDataOut.Length * sizeof(Field2D));
+                    System.Buffer.MemoryCopy(dataPtr, dataPtr2, compShaderDataOut.Length * sizeof(Field2D), compShaderDataOut.Length * sizeof(Field2D));
+                }
+            }
+        }
+        GL.UnmapBuffer(BufferTarget.ShaderStorageBuffer);
+        int block_index1 = GL.GetProgramResourceIndex(computeShader.handle, ProgramInterface.ShaderStorageBlock, "out_data");
+        int ssbo1_binding_point_index = 3;
+        GL.ShaderStorageBlockBinding(computeShader.handle,block_index1, ssbo1_binding_point_index);
+
 
         shader.Use();
         GL.BindVertexArray(vertexArrayObject);
-        GL.ActiveTexture(TextureUnit.Texture0);
-        GL.BindTexture(TextureTarget.Texture2D, 1);
+        GL.ActiveTexture(TextureUnit.Texture1);
+        GL.BindTexture(TextureTarget.Texture2D, compTextureHandle);
         GL.DrawArrays(PrimitiveType.TriangleFan, 0, 4);
 
         SwapBuffers();
@@ -151,25 +228,27 @@ public class Window : GameWindow
     }
     protected override void OnUpdateFrame(FrameEventArgs e)
     {
+        
         zuh++;
-        Console.WriteLine("step:" + zuh + " t:" + (zuh * 0.0006f).ToString("0.000") + "                fps:" + (1 / e.Time).ToString("#.#"));
-        grid.TimeStep(0.0006f);
-        if (0 == 0)
+        Console.WriteLine("step:" + zuh + " t:" + (zuh * 0.0006f).ToString("0.0000") + "                fps:" + (1 / e.Time).ToString("#.#"));
+      //  grid.TimeStep(0.0006f);
+        if (0 == 1)
         {
             for (int i = 0; i < gWidth; i++)
             {
                 for (int j = 0; j < gHeight; j++)
                 {
-                      textureData[(gWidth * j + i) * 3] = (float)Math.Sqrt(grid.u[i, j] * grid.u[i,j] + grid.v[i, j] * grid.v[i, j]);
+                   //   textureData[(gWidth * j + i) * 3] = (float)Math.Sqrt(grid.u[i, j] * grid.u[i,j] + grid.v[i, j] * grid.v[i, j]);
                     //  textureData[(gWidth * j + i) * 3 + 1] = grid.e[i,j] / 50f;
                      // textureData[(gWidth * j + i) * 3 + 2] = grid.d[i, j] / 2.5f;
 
                     textureData[(gWidth * j + i) * 3] = grid.S[i, j];
                     textureData[(gWidth * j + i) * 3 + 1] = 0.2f;
-                 //   textureData[(gWidth * j + i) * 3 + 2] = 1f - grid.S[i,j];
+                    textureData[(gWidth * j + i) * 3 + 2] = 1f - grid.S[i,j];
                 }
             }
         }
-        GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb32f, gWidth, gHeight, 0, PixelFormat.Rgb, PixelType.Float, textureData);
+        //GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb32f, gWidth, gHeight, 0, PixelFormat.Rgb, PixelType.Float, textureData);
+        
     }
 }
