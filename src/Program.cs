@@ -55,13 +55,17 @@ public class Window : GameWindow
         public float dt;
         public int mousePosX;
         public int mousePosY;
-        public ShaderSimInfo(float dx, float dy, float dt, Vector2 mousePos)
+        public int screenX;
+        public int screenY;
+        public ShaderSimInfo(float dx, float dy, float dt, Vector2 mousePos, int screnX, int screnY)
         {
             this.dx = dx;
             this.dy = dy;
             this.dt = dt;
-            this.mousePosX = (int)mousePos.X;
-            this.mousePosY = (int)mousePos.Y;
+            mousePosX = (int)mousePos.X;
+            mousePosY = (int)mousePos.Y;
+            screenX = screnX;
+            screenY = screnY;
         }
     }
 
@@ -146,7 +150,7 @@ public class Window : GameWindow
         zuh = 0;
 
         //shader sim parameters
-        ssInfo = new ShaderSimInfo(0.25f, 0.25f, 0.0002f, Vector2.Zero);
+        ssInfo = new ShaderSimInfo(0.25f, 0.25f, 0.0002f, Vector2.Zero, width, height);
 
         for (int i = 0; i < gWidth; i++)
         {
@@ -283,24 +287,24 @@ public class Window : GameWindow
                     simState = SimState.Paused;
                 }
             }
-
-            ////////// FIX TS
-
+            ssInfo.mousePosX = (int)MousePosition.X;
+            ssInfo.mousePosY = (int)MousePosition.Y;
             GL.BindBuffer(BufferTarget.ShaderStorageBuffer, ssbo);
-            GL.GetBufferParameter(BufferTarget.ShaderStorageBuffer, BufferParameterName.BufferSize, out int actualBufferSize);
-            IntPtr altPtr = GL.MapBuffer(BufferTarget.ShaderStorageBuffer, BufferAccess.WriteOnly);
-            GL.UnmapBuffer(BufferTarget.ShaderStorageBuffer);
             unsafe
             {
                 fixed (void* dataPtr = &compShaderDataIn[0,0])
                 {
                     IntPtr ptr = GL.MapBufferRange(BufferTarget.ShaderStorageBuffer, (IntPtr)(sizeof(ShaderSimInfo)), compShaderDataIn.Length * sizeof(Field2D), MapBufferAccessMask.MapWriteBit);
-
-                    Console.WriteLine("BufferSize:" + actualBufferSize + "  DataSize: " + (compShaderDataIn.Length * sizeof(Field2D)) + "  ptr" + altPtr + "  ptrt" + ptr);
                     System.Buffer.MemoryCopy(dataPtr, ptr.ToPointer(), compShaderDataIn.Length * sizeof(Field2D), compShaderDataIn.Length * sizeof(Field2D));
+                    GL.UnmapBuffer(BufferTarget.ShaderStorageBuffer);
+                }
+                fixed (ShaderSimInfo* ssInfoPtr = &ssInfo)
+                {
+                    IntPtr ptrH = GL.MapBuffer(BufferTarget.ShaderStorageBuffer, BufferAccess.WriteOnly);
+                    System.Buffer.MemoryCopy(ssInfoPtr, ptrH.ToPointer(), sizeof(ShaderSimInfo),sizeof(ShaderSimInfo));
+                    GL.UnmapBuffer(BufferTarget.ShaderStorageBuffer);
                 }
             }
-            GL.UnmapBuffer(BufferTarget.ShaderStorageBuffer);
             int block_index = GL.GetProgramResourceIndex(computeShader.handle, ProgramInterface.ShaderStorageBlock, "shader_data");
             int ssbo_binding_point_index = 2;
             GL.ShaderStorageBlockBinding(computeShader.handle, block_index, ssbo_binding_point_index);

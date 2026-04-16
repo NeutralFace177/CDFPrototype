@@ -22,20 +22,12 @@ vec3 hsv2rgb(vec3 c)
 }
 
 struct Fields2D {
+    float d;
     float u;
     float v;
     float E;
     float S;
-    float d;
 };
-
-struct outField2D {
-    float d;
-    float u;
-    float v;
-    float E;
-    float S;
-};  
 
 struct coordIndexPair {
     int i;
@@ -44,7 +36,7 @@ struct coordIndexPair {
 };
 
 struct DebugThing {
-    outField2D f2d;
+    Fields2D f2d;
 };
 
 struct DataGroup {
@@ -81,12 +73,14 @@ layout (std430, binding = 2) buffer shader_data {
     float dx;
     float dy;
     float dt;
-    vec2 mousePos;
+    int mouseX;
+    int mouseY;
+    int screenWidth;
+    int screenHeight;
     Fields2D[] fields;
 };
-
 layout (std430, binding = 3) buffer out_data {
-    outField2D[] outFields;
+    Fields2D[] outFields;
 };
 
 layout (std430, binding = 4) buffer out_debug {
@@ -484,10 +478,20 @@ void main() {
     float uYF = Scheme(1,1,true);
     float uYB = Scheme(1,1,false);
 
+    float uXFC = CD(1,0,true);
+    float uXBC = CD(1,0,false);
+    float uYFC = CD(1,1,true);
+    float uYBC = CD(1,1,false);
+
     float vXF = Scheme(2,0,true);
     float vXB = Scheme(2,0,false);
     float vYF = Scheme(2,1,true);
     float vYB = Scheme(2,1,false);
+
+    float vXFC = CD(2,0,true);
+    float vXBC = CD(2,0,false);
+    float vYFC = CD(2,1,true);
+    float vYBC = CD(2,1,false);
 
     float EXF = Scheme(3,0,true);
     float EXB = Scheme(3,0,false);
@@ -521,8 +525,8 @@ void main() {
                         + (TxyXF - TxyXB) / dx + (TyyYF - TyyYB) / dy);
     outFields[index].E = fields[index].E + (1.0 / fields[index].d) * dt * (-(uXF * (dXF * EXF + pressureToggle * pXFC) - uXB * (dXB * EXB + pressureToggle * pXBC)) / dx
                      - (vYF * (dYF * EYF + pressureToggle * pYFC) - vYB * (dYB * EYB + pressureToggle * pYBC)) / dy
-                     +((uXF * TxxXF + vXF * TxyXF - qxXF) - (uXB * TxxXB + vXB * TxyXB - qxXB)) / dx
-                     + ((uYF * TxyYF + vYF * TyyYF - qyYF) - (uYB * TxyYB + vYB * TyyYB - qyYB)) / dy);
+                     +((uXFC * TxxXF + vXFC * TxyXF - qxXF) - (uXBC * TxxXB + vXBC * TxyXB - qxXB)) / dx
+                     + ((uYFC * TxyYF + vYFC * TyyYF - qyYF) - (uYBC * TxyYB + vYBC * TyyYB - qyYB)) / dy);
     outFields[index].S = fields[index].S + (1.0 / fields[index].d) * dt * (-(dXF * uXF * SXF - dXB * uXB * SXB) / dx - (dYF * vYF * SYF - dYB * vYB * SYB) / dy + 0.05*(SDxXF - SDxXB) / dx + 0.05*(SDyYF - SDyYB) / dy);
     }
 
