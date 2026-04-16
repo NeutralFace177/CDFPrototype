@@ -3,13 +3,50 @@
 layout (local_size_x = 1, local_size_y = 1) in;
 layout(rgba32f, binding = 1) uniform image2D imgOutput;
 
+//https://gist.github.com/983/e170a24ae8eba2cd174f
+vec3 rgb2hsv(vec3 c)
+{
+    vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+    vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+    float d = q.x - min(q.w, q.y);
+    float e = 1.0e-10;
+    return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+vec3 hsv2rgb(vec3 c)
+{
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
 struct Fields2D {
+    float u;
+    float v;
+    float E;
+    float S;
+    float d;
+};
+
+struct outField2D {
     float d;
     float u;
     float v;
     float E;
     float S;
 };  
+
+struct coordIndexPair {
+    int i;
+    int j;
+    int index;
+};
+
+struct DebugThing {
+    outField2D f2d;
+};
+
 struct DataGroup {
     float center;
     float right;
@@ -40,48 +77,105 @@ struct iDataGroup4 {
     uint up;
     uint down;
 };
-
 layout (std430, binding = 2) buffer shader_data {
+    float dx;
+    float dy;
+    float dt;
+    vec2 mousePos;
     Fields2D[] fields;
 };
 
 layout (std430, binding = 3) buffer out_data {
-    Fields2D[] outFields;
+    outField2D[] outFields;
+};
+
+layout (std430, binding = 4) buffer out_debug {
+    DebugThing[] debug;
 };
 
 uint coordToIndex(int i, int j) {
     return i*gl_NumWorkGroups.y+j;
 }
-
+uint width = gl_NumWorkGroups.x;
+uint height = gl_NumWorkGroups.y;
 ivec2 coords = ivec2(gl_GlobalInvocationID.xy);
 uint index = coordToIndex(coords.x, coords.y);
 iDataGroup4 indices = iDataGroup4(coordToIndex(coords.x+1,coords.y),coordToIndex(coords.x-1,coords.y),coordToIndex(coords.x,coords.y+1),coordToIndex(coords.x,coords.y-1));
-uint width = gl_NumWorkGroups.x;
-uint height = gl_NumWorkGroups.y;
-
-float dx = 0.25;
-float dy = 0.25;
 
 float BC(int valId, int i, int j, int iOffset, int jOffset) {
-    uint newIndex = coordToIndex(int(clamp(i+iOffset,0,width-1)),int(clamp(j+jOffset,0,height-1)));
-    if (i+iOffset < 0 || i+iOffset >= width || j+jOffset < 0 || j+jOffset >= height) { 
-            switch (valId) {
-                //d
-                case 0:
-                    return fields[newIndex].d;
-                //u
-                case 1:
-                    return 0;
-                //v
-                case 2:
-                    return 0;
-                //e
-                case 3:
-                    return fields[newIndex].E - 0.5 * (fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v);
-                //S 
-                case 4:
-                    return fields[newIndex].S;
-            }
+    uint newIndex = coordToIndex(int(clamp(i+iOffset,0,int(width-1))),int(clamp(j+jOffset,0,int(height-1))));
+    if (i+iOffset < 0) { 
+        switch (valId) {
+            //d
+            case 0:
+                return 1.293;
+            //u
+            case 1:
+                return 5;
+            //v
+            case 2:
+                return 0;  
+            //e
+            case 3:
+                return 0.718 * 30.0 + 0.5 * (25);
+            //S 
+            case 4:
+                return fields[newIndex].S;
+        }
+    } else if (i+iOffset >= width) {
+        switch (valId) {
+            //d
+            case 0:
+                return fields[newIndex].d;
+            //u
+            case 1:
+                return fields[newIndex].u;
+            //v
+            case 2:
+                return fields[newIndex].v;
+            //e
+            case 3:
+                return fields[newIndex].E;
+            //S 
+            case 4:
+                return fields[newIndex].S;
+        }
+    } else if (j+jOffset < 0) {
+        switch (valId) {
+            //d
+            case 0:
+                return fields[newIndex].d;
+            //u
+            case 1:
+                return 0;
+            //v
+            case 2:
+                return 0;
+            //e
+            case 3:
+                return fields[newIndex].E - 0.5 * (fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v);
+            //S 
+            case 4:
+                return fields[newIndex].S;
+        }
+    } else if (j+jOffset >= height) {
+        switch (valId) {
+            //d
+            case 0:
+                return fields[newIndex].d;
+            //u
+            case 1:
+                return 0;
+            //v
+            case 2:
+                return 0;
+            //e
+            case 3:
+                return fields[newIndex].E - 0.5 * (fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v);
+            //S 
+            case 4:
+                return fields[newIndex].S;
+        }
     } else {
         switch (valId) {
             case 0:
@@ -91,7 +185,7 @@ float BC(int valId, int i, int j, int iOffset, int jOffset) {
             case 2:
                 return fields[newIndex].v;
             case 3:
-                return fields[newIndex].E - 0.5 * (fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v);
+                return fields[newIndex].E;
             case 4:
                 return fields[newIndex].S;
         }
@@ -109,12 +203,12 @@ vec3 calcStressTensor(int i, int j) {
         uDx = (BC(1,i,j,0,0) < 0) ? (BC(1,i,j,1,0) - BC(1,i,j,0,0)) / dx : (BC(1,i,j,0,0) - BC(1,i,j,-1,0)) / dx;
         uDy = (BC(2,i,j,0,0) < 0) ? (BC(1,i,j,0,1) - BC(1,i,j,0,0)) / dy : (BC(1,i,j,0,0) - BC(1,i,j,0,-1)) / dy;
         vDx = (BC(1,i,j,0,0) < 0) ? (BC(2,i,j,1,0) - BC(2,i,j,0,0)) / dx : (BC(2,i,j,0,0) - BC(2,i,j,-1,0)) / dx;
-        vDy = (BC(2,i,j,0,0) < 0) ? (BC(2,i,j,0,1) - BC(2,i,j,0,0)) / dy : (BC(2,i,j,0,0) - BC(1,i,j,0,-1)) / dy; 
-    } else if (i==0 || i == width || j == 0 || j == height) {
+        vDy = (BC(2,i,j,0,0) < 0) ? (BC(2,i,j,0,1) - BC(2,i,j,0,0)) / dy : (BC(2,i,j,0,0) - BC(2,i,j,0,-1)) / dy; 
+    } else if (i==0 || i == width-1 || j == 0 || j == height-1) {
         uDx = (fields[newIndex].u < 0) ? (BC(1,i,j,1,0) - fields[newIndex].u) / dx : (fields[newIndex].u - BC(1,i,j,-1,0)) / dx;
         uDy = (fields[newIndex].v < 0) ? (BC(1,i,j,0,1) - fields[newIndex].u) / dy : (fields[newIndex].u - BC(1,i,j,0,-1)) / dy;
         vDx = (fields[newIndex].u < 0) ? (BC(2,i,j,1,0) - fields[newIndex].v) / dx : (fields[newIndex].v - BC(2,i,j,-1,0)) / dx;
-        vDy = (fields[newIndex].v < 0) ? (BC(2,i,j,0,1) - fields[newIndex].v) / dy : (fields[newIndex].v - BC(1,i,j,0,-1)) / dy; 
+        vDy = (fields[newIndex].v < 0) ? (BC(2,i,j,0,1) - fields[newIndex].v) / dy : (fields[newIndex].v - BC(2,i,j,0,-1)) / dy; 
     } else {
         uDx = (fields[newIndex].u < 0) ? (fields[newIndices.right].u - fields[newIndex].u) / dx : (fields[newIndex].u - fields[newIndices.left].u) / dx;
         uDy = (fields[newIndex].v < 0) ? (fields[newIndices.up].u - fields[newIndex].u) / dy : (fields[newIndex].u - fields[newIndices.down].u) / dy;
@@ -123,9 +217,35 @@ vec3 calcStressTensor(int i, int j) {
     }
     float divU = uDx + vDy;
     float visc = 0.0000186;
-    float visc2 = (2.0/3.0) * visc;
+    float visc2 = (2.0/2.0) * visc;
     //Txx Txy Tyy
     return vec3(visc2 * divU+2.0*visc*uDx, visc*(uDy+vDx), visc2*divU + 2.0*visc*vDy);
+}
+//velocity derivatives
+vec4 Dv(int i, int j) {
+    uint newIndex = coordToIndex(i,j);
+    iDataGroup4 newIndices = iDataGroup4(coordToIndex(i+1,j),coordToIndex(i-1,j),coordToIndex(i,j+1),coordToIndex(i,j-1));
+    float uDx = 0;
+    float uDy = 0;
+    float vDx = 0;
+    float vDy = 0;
+    if (i<0 || i >= width || j < 0 || j >= height) {
+        uDx = (BC(1,i,j,0,0) < 0) ? (BC(1,i,j,1,0) - BC(1,i,j,0,0)) / dx : (BC(1,i,j,0,0) - BC(1,i,j,-1,0)) / dx;
+        uDy = (BC(2,i,j,0,0) < 0) ? (BC(1,i,j,0,1) - BC(1,i,j,0,0)) / dy : (BC(1,i,j,0,0) - BC(1,i,j,0,-1)) / dy;
+        vDx = (BC(1,i,j,0,0) < 0) ? (BC(2,i,j,1,0) - BC(2,i,j,0,0)) / dx : (BC(2,i,j,0,0) - BC(2,i,j,-1,0)) / dx;
+        vDy = (BC(2,i,j,0,0) < 0) ? (BC(2,i,j,0,1) - BC(2,i,j,0,0)) / dy : (BC(2,i,j,0,0) - BC(2,i,j,0,-1)) / dy; 
+    } else if (i==0 || i == width-1 || j == 0 || j == height-1) {
+        uDx = (fields[newIndex].u < 0) ? (BC(1,i,j,1,0) - fields[newIndex].u) / dx : (fields[newIndex].u - BC(1,i,j,-1,0)) / dx;
+        uDy = (fields[newIndex].v < 0) ? (BC(1,i,j,0,1) - fields[newIndex].u) / dy : (fields[newIndex].u - BC(1,i,j,0,-1)) / dy;
+        vDx = (fields[newIndex].u < 0) ? (BC(2,i,j,1,0) - fields[newIndex].v) / dx : (fields[newIndex].v - BC(2,i,j,-1,0)) / dx;
+        vDy = (fields[newIndex].v < 0) ? (BC(2,i,j,0,1) - fields[newIndex].v) / dy : (fields[newIndex].v - BC(2,i,j,0,-1)) / dy; 
+    } else {
+        uDx = (fields[newIndex].u < 0) ? (fields[newIndices.right].u - fields[newIndex].u) / dx : (fields[newIndex].u - fields[newIndices.left].u) / dx;
+        uDy = (fields[newIndex].v < 0) ? (fields[newIndices.up].u - fields[newIndex].u) / dy : (fields[newIndex].u - fields[newIndices.down].u) / dy;
+        vDx = (fields[newIndex].u < 0) ? (fields[newIndices.right].v - fields[newIndex].v) / dx : (fields[newIndex].v - fields[newIndices.left].v) / dx;
+        vDy = (fields[newIndex].v < 0) ? (fields[newIndices.up].v - fields[newIndex].v) / dy : (fields[newIndex].v - fields[newIndices.down].v) / dy;
+    }
+    return vec4(uDx,uDy,vDx,vDy);
 }
 
 float calcPressure(int i, int j) {
@@ -147,14 +267,14 @@ vec2 calcHeatFlux(int i, int j) {
         tmp = (BC(3,i,j,0,0)-0.5*(BC(1,i,j,0,0)*BC(1,i,j,0,0)+BC(2,i,j,0,0)*BC(2,i,j,0,0)))/0.718;
         TDx = (BC(1,i,j,0,0) < 0) ? (((BC(3,i,j,1,0)-0.5*(BC(1,i,j,1,0)*BC(1,i,j,1,0)+BC(2,i,j,1,0)*BC(2,i,j,1,0)))/0.718)-tmp) / dx : (tmp - ((BC(3,i,j,-1,0)-0.5*(BC(1,i,j,-1,0)*BC(1,i,j,-1,0)+BC(2,i,j,-1,0)*BC(2,i,j,-1,0)))/0.718)) / dx;
         TDy = (BC(2,i,j,0,0) < 0) ? (((BC(3,i,j,0,1)-0.5*(BC(1,i,j,0,1)*BC(1,i,j,0,1)+BC(2,i,j,0,1)*BC(2,i,j,0,1)))/0.718)-tmp) / dy : (tmp - ((BC(3,i,j,0,-1)-0.5*(BC(1,i,j,0,-1)*BC(1,i,j,0,-1)+BC(2,i,j,0,-1)*BC(2,i,j,0,-1)))/0.718)) / dy;
-    } else if (i==0 || i == width || j == 0 || j == height) {
+    } else if (i==0 || i == width-1 || j == 0 || j == height-1) {
         tmp = (fields[newIndex].E-0.5*(fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v))/0.718;
         TDx = (fields[newIndex].u < 0) ? (((BC(3,i,j,1,0)-0.5*(BC(1,i,j,1,0)*BC(1,i,j,1,0)+BC(2,i,j,1,0)*BC(2,i,j,1,0)))/0.718)-tmp) / dx : (tmp - ((BC(3,i,j,-1,0)-0.5*(BC(1,i,j,-1,0)*BC(1,i,j,-1,0)+BC(2,i,j,-1,0)*BC(2,i,j,-1,0)))/0.718)) / dx;
         TDy = (fields[newIndex].v < 0) ? (((BC(3,i,j,0,1)-0.5*(BC(1,i,j,0,1)*BC(1,i,j,0,1)+BC(2,i,j,0,1)*BC(2,i,j,0,1)))/0.718)-tmp) / dy : (tmp - ((BC(3,i,j,0,-1)-0.5*(BC(1,i,j,0,-1)*BC(1,i,j,0,-1)+BC(2,i,j,0,-1)*BC(2,i,j,0,-1)))/0.718)) / dy;
     } else {
         tmp = (fields[newIndex].E-0.5*(fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v))/0.718;
         TDx = (fields[newIndex].u < 0) ? (((fields[newIndices.right].E-0.5*(fields[newIndices.right].u*fields[newIndices.right].u+fields[newIndices.right].v*fields[newIndices.right].v))/0.718) - tmp) / dx : (tmp - ((fields[newIndices.left].E-0.5*(fields       [newIndices.left].u*fields[newIndices.left].u+fields[newIndices.left].v*fields[newIndices.left].v))/0.718)) / dx;
-        TDy = (fields[newIndex].v < 0) ? (((fields[newIndices.up].E-0.5*(fields[newIndices.up].u*fields[newIndices.up].u+fields[newIndices.up].v*fields[newIndices.up].v))/0.718) - tmp) / dy : (tmp - ((fields[newIndices.up].E-0.5*(fields[newIndices.up].u*fields[newIndices.up].u+fields[newIndices.up].v*fields[newIndices.up].v))/0.718)) / dy;
+        TDy = (fields[newIndex].v < 0) ? (((fields[newIndices.up].E-0.5*(fields[newIndices.up].u*fields[newIndices.up].u+fields[newIndices.up].v*fields[newIndices.up].v))/0.718) - tmp) / dy : (tmp - ((fields[newIndices.down].E-0.5*(fields[newIndices.down].u*fields[newIndices.down].u+fields[newIndices.down].v*fields[newIndices.down].v))/0.718)) / dy;
     }
     return vec2(-0.02662 * TDx, -0.02662 * TDy);
 }
@@ -167,7 +287,7 @@ vec2 calcSGradient(int i, int j ) {
     if (i < 0 || i >= width || j < 0 || j >= height) {
         SDx = (BC(1,i,j,0,0) < 0) ? (BC(4,i,j,1,0) - BC(4,i,j,0,0)) / dx : (BC(4,i,j,0,0)-BC(4,i,j,-1,0)) / dx;
         SDy = (BC(2,i,j,0,0) < 0) ? (BC(4,i,j,0,1) - BC(4,i,j,0,0)) / dy : (BC(4,i,j,0,0)-BC(4,i,j,0,-1)) / dy;
-    } else if (i == 0 || i == width || j == 0 || j == height) {
+    } else if (i == 0 || i == width-1 || j == 0 || j == height-1) {
         SDx = (fields[newIndex].u < 0) ? (BC(4,i,j,1,0) - fields[newIndex].S) / dx : (fields[newIndex].S-BC(4,i,j,-1,0)) / dx;
         SDy = (fields[newIndex].u < 0) ? (BC(4,i,j,0,1) - fields[newIndex].S) / dy : (fields[newIndex].S-BC(4,i,j,0,-1)) / dy;
     } else {
@@ -209,6 +329,88 @@ float CD(int valId, int dim, bool forwards) {
     }
 }
 
+float QUICK(int valId, int dim, bool forwards) {
+    int i = coords.x;
+    int j = coords.y;
+    if (dim == 0) {
+        switch (valId) {
+            case 0:
+                return (fields[index].u >= 0) ? -0.125*BC(0,i,j,forwards?-1:-2,0)+0.75*BC(0,i,j,forwards?0:1,0)+0.375*BC(0,i,j,forwards?1:0,0) : 0.375*BC(0,i,j,forwards?0:-1,0)+0.75*BC(0,i,j,forwards?1:0,0)-0.125*BC(0,i,j,forwards?2:1,0);
+            case 1:
+                return (fields[index].u >= 0) ? -0.125*BC(1,i,j,forwards?-1:-2,0)+0.75*BC(1,i,j,forwards?0:1,0)+0.375*BC(1,i,j,forwards?1:0,0) : 0.375*BC(1,i,j,forwards?0:-1,0)+0.75*BC(1,i,j,forwards?1:0,0)-0.125*BC(1,i,j,forwards?2:1,0);
+            case 2:
+                return (fields[index].u >= 0) ? -0.125*BC(2,i,j,forwards?-1:-2,0)+0.75*BC(2,i,j,forwards?0:1,0)+0.375*BC(2,i,j,forwards?1:0,0) : 0.375*BC(2,i,j,forwards?0:-1,0)+0.75*BC(2,i,j,forwards?1:0,0)-0.125*BC(2,i,j,forwards?2:1,0);
+            case 3:
+                return (fields[index].u >= 0) ? -0.125*BC(3,i,j,forwards?-1:-2,0)+0.75*BC(3,i,j,forwards?0:1,0)+0.375*BC(3,i,j,forwards?1:0,0) : 0.375*BC(3,i,j,forwards?0:-1,0)+0.75*BC(3,i,j,forwards?1:0,0)-0.125*BC(3,i,j,forwards?2:1,0);
+            case 4:
+                return (fields[index].u >= 0) ? -0.125*BC(4,i,j,forwards?-1:-2,0)+0.75*BC(4,i,j,forwards?0:1,0)+0.375*BC(4,i,j,forwards?1:0,0) : 0.375*BC(4,i,j,forwards?0:-1,0)+0.75*BC(4,i,j,forwards?1:0,0)-0.125*BC(4,i,j,forwards?2:1,0);
+        }
+    } else {
+        switch (valId) {
+            case 0:
+                return (fields[index].v >= 0) ? -0.125*BC(0,i,j,0,forwards?-1:-2)+0.75*BC(0,i,j,0,forwards?0:1)+0.375*BC(0,i,j,0,forwards?1:0) : 0.375*BC(0,i,j,0,forwards?0:-1)+0.75*BC(0,i,j,0,forwards?1:0)-0.125*BC(0,i,j,0,forwards?2:1);
+            case 1:
+                return (fields[index].v >= 0) ? -0.125*BC(1,i,j,0,forwards?-1:-2)+0.75*BC(1,i,j,0,forwards?0:1)+0.375*BC(1,i,j,0,forwards?1:0) : 0.375*BC(1,i,j,0,forwards?0:-1)+0.75*BC(1,i,j,0,forwards?1:0)-0.125*BC(1,i,j,0,forwards?2:1);
+            case 2:
+                return (fields[index].v >= 0) ? -0.125*BC(2,i,j,0,forwards?-1:-2)+0.75*BC(2,i,j,0,forwards?0:1)+0.375*BC(2,i,j,0,forwards?1:0) : 0.375*BC(2,i,j,0,forwards?0:-1)+0.75*BC(2,i,j,0,forwards?1:0)-0.125*BC(2,i,j,0,forwards?2:1);
+            case 3:
+                return (fields[index].v >= 0) ? -0.125*BC(3,i,j,0,forwards?-1:-2)+0.75*BC(3,i,j,0,forwards?0:1)+0.375*BC(3,i,j,0,forwards?1:0) : 0.375*BC(3,i,j,0,forwards?0:-1)+0.75*BC(3,i,j,0,forwards?1:0)-0.125*BC(3,i,j,0,forwards?2:1);
+            case 4:
+                return (fields[index].v >= 0) ? -0.125*BC(4,i,j,0,forwards?-1:-2)+0.75*BC(4,i,j,0,forwards?0:1)+0.375*BC(4,i,j,0,forwards?1:0) : 0.375*BC(4,i,j,0,forwards?0:-1)+0.75*BC(4,i,j,0,forwards?1:0)-0.125*BC(4,i,j,0,forwards?2:1);
+        }
+    }
+}
+
+float vanLeer(float r) {
+    return (r+abs(r))/(1.0+abs(r));
+}
+
+float QUICKLIM(int valId, int dim, bool forwards) {
+    int i = int(coords.x);
+    int j = int(coords.y);
+    float FL = CD(valId, dim, forwards);
+    float FH = QUICK(valId, dim, forwards);
+    float r;
+    if (dim==0) {
+        switch (valId) {
+            case 0:
+                r = (fields[index].d-BC(0,i,j,-1,0))/(BC(0,i,j,1,0)-fields[index].d+0.0001);
+                break;
+            case 1:
+                r = (fields[index].u-BC(1,i,j,-1,0))/(BC(1,i,j,1,0)-fields[index].u+0.0001);
+                break;
+            case 2:
+                r = (fields[index].v-BC(2,i,j,-1,0))/(BC(2,i,j,1,0)-fields[index].v+0.0001);
+                break;
+            case 3:
+                r = (fields[index].E-BC(3,i,j,-1,0))/(BC(3,i,j,1,0)-fields[index].E+0.0001);
+                break;
+            case 4:
+                r = (fields[index].S-BC(4,i,j,-1,0))/(BC(4,i,j,1,0)-fields[index].S+0.0001);
+                break;
+        }
+    } else {
+        switch (valId) {
+            case 0:
+                r = (fields[index].d-BC(0,i,j,0,-1))/(BC(0,i,j,0,1)-fields[index].d+0.0001);
+                break;
+            case 1:
+                r = (fields[index].u-BC(1,i,j,0,-1))/(BC(1,i,j,0,1)-fields[index].u+0.0001);
+                break;
+            case 2:
+                r = (fields[index].v-BC(2,i,j,0,-1))/(BC(2,i,j,0,1)-fields[index].v+0.0001);
+                break;
+            case 3:
+                r = (fields[index].E-BC(3,i,j,0,-1))/(BC(3,i,j,0,1)-fields[index].E+0.0001);
+                break;
+            case 4:
+                r = (fields[index].S-BC(4,i,j,0,-1))/(BC(4,i,j,0,1)-fields[index].S+0.0001);
+                break;
+        }
+    }
+    return FL+vanLeer(r)*(FH-FL);
+}
+
 float FOU(int valId, int dim, bool forwards) {
     if (dim == 0) {
         switch (valId) {
@@ -239,9 +441,12 @@ float FOU(int valId, int dim, bool forwards) {
     }
 }
 
+float Scheme(int valId, int dim, bool forwards) {
+    return QUICKLIM(valId,dim,forwards);
+}
+
 
 void main() {
-    vec4 value = vec4(0.0, 0.0, 0.0, 1.0);
     DataGroupVec3 tensor = DataGroupVec3(calcStressTensor(coords.x,coords.y),calcStressTensor(coords.x+1,coords.y),calcStressTensor(coords.x-1,coords.y),calcStressTensor(coords.x,coords.y+1),calcStressTensor(coords.x,coords.y-1));
     DataGroupVec2 q = DataGroupVec2(calcHeatFlux(coords.x,coords.y),calcHeatFlux(coords.x+1,coords.y),calcHeatFlux(coords.x-1,coords.y),calcHeatFlux(coords.x,coords.y+1),calcHeatFlux(coords.x,coords.y-1));
     DataGroup p = DataGroup(calcPressure(coords.x,coords.y),calcPressure(coords.x+1,coords.y),calcPressure(coords.x-1,coords.y),calcPressure(coords.x,coords.y+1),calcPressure(coords.x,coords.y-1));
@@ -269,50 +474,73 @@ void main() {
     float qyYF = (q.center.y + q.up.y)/2.0;
     float qyYB = (q.center.y + q.down.y)/2.0;
 
-    float dXF = CD(0,0,true);
-    float dXB = CD(0,0,false);
-    float dYF = CD(0,1,true);
-    float dYB = CD(0,1,false);
+    float dXF = Scheme(0,0,true);
+    float dXB = Scheme(0,0,false);
+    float dYF = Scheme(0,1,true);
+    float dYB = Scheme(0,1,false);
 
-    float uXF = CD(1,0,true);
-    float uXB = CD(1,0,false);
-    float uYF = CD(1,1,true);
-    float uYB = CD(1,1,false);
+    float uXF = Scheme(1,0,true);
+    float uXB = Scheme(1,0,false);
+    float uYF = Scheme(1,1,true);
+    float uYB = Scheme(1,1,false);
 
-    float vXF = CD(2,0,true);
-    float vXB = CD(2,0,false);
-    float vYF = CD(2,1,true);
-    float vYB = CD(2,1,false);
+    float vXF = Scheme(2,0,true);
+    float vXB = Scheme(2,0,false);
+    float vYF = Scheme(2,1,true);
+    float vYB = Scheme(2,1,false);
 
-    float SXF = CD(4,0,true);
-    float SXB = CD(4,0,false);
-    float SYF = CD(4,1,true);
-    float SYB = CD(4,1,false);
+    float EXF = Scheme(3,0,true);
+    float EXB = Scheme(3,0,false);
+    float EYF = Scheme(3,1,true);
+    float EYB = Scheme(3,1,false);
+
+    float SXF = Scheme(4,0,true);
+    float SXB = Scheme(4,0,false);
+    float SYF = Scheme(4,1,true);
+    float SYB = Scheme(4,1,false);
 
     float SDxXF = (SGrad.center.x + SGrad.right.x)/2.0;
     float SDxXB = (SGrad.center.x + SGrad.left.x)/2.0;
     float SDyYF = (SGrad.center.y + SGrad.up.y)/2.0;
     float SDyYB = (SGrad.center.y + SGrad.down.y)/2.0;
 
-    float dt = 0.0006;
     float pressureToggle = 1.0;
 
+    if ((coords.x-0.25*width)*(coords.x-0.25*width)+(coords.y-0.5*height)*(coords.y-0.5*height) < (width*1.0/30.0)*(width*1.0/30.0) && true) {
+        outFields[index].d = fields[index].d;
+        outFields[index].u = 0;
+        outFields[index].v = 0;
+        outFields[index].E = fields[index].E;
+        outFields[index].S = fields[index].S;
+    } else {
     outFields[index].d = fields[index].d + dt * (-(dXF * uXF - dXB * uXB) / dx - (dYF * vYF - dYB * vYB) / dy);
     outFields[index].u = fields[index].u + (1.0 / fields[index].d) * dt * (-((dXF * uXF * uXF + pressureToggle * pXFC) - (dXB * uXB * uXB + pressureToggle * pXBC)) / dx -
                         (dYF * uYF * vYF - dYB * uYB * vYB) / dy + (TxxXF - TxxXB) / dx + (TxyYF - TxyYB) / dy);
     outFields[index].v = fields[index].v + (1.0 / fields[index].d) * dt * (-(dXF * uXF * vXF - dXB * uXB * vXB) / dx
                         - ((dYF * vYF * vYF + pressureToggle * pYFC) - (dYB * vYB * vYB + pressureToggle * pYBC)) / dy 
                         + (TxyXF - TxyXB) / dx + (TyyYF - TyyYB) / dy);
-    outFields[index].E = fields[index].E + (1.0 / fields[index].d) * dt * (-(uXF * (dXF * CD(3,0,true) + pressureToggle * pXFC) - uXB * (dXB * CD(3,0,false) + pressureToggle * pXBC)) / dx
-                     - (vYF * (dYF * CD(3,1,true) + pressureToggle * pYFC) - vYB * (dYB * CD(3,1,false) + pressureToggle * pYBC)) / dy
+    outFields[index].E = fields[index].E + (1.0 / fields[index].d) * dt * (-(uXF * (dXF * EXF + pressureToggle * pXFC) - uXB * (dXB * EXB + pressureToggle * pXBC)) / dx
+                     - (vYF * (dYF * EYF + pressureToggle * pYFC) - vYB * (dYB * EYB + pressureToggle * pYBC)) / dy
                      +((uXF * TxxXF + vXF * TxyXF - qxXF) - (uXB * TxxXB + vXB * TxyXB - qxXB)) / dx
-                     + ((uYF * TxyYF + vYF * TyyYF - qyYF) - (uYB * TxyYB + vYB * TyyYB - qyYB)) / dy);;
+                     + ((uYF * TxyYF + vYF * TyyYF - qyYF) - (uYB * TxyYB + vYB * TyyYB - qyYB)) / dy);
     outFields[index].S = fields[index].S + (1.0 / fields[index].d) * dt * (-(dXF * uXF * SXF - dXB * uXB * SXB) / dx - (dYF * vYF * SYF - dYB * vYB * SYB) / dy + 0.05*(SDxXF - SDxXB) / dx + 0.05*(SDyYF - SDyYB) / dy);
+    }
 
+    vec3 SVIEW = hsv2rgb(vec3(fields[index].S*0.75,1.0,1.0));
+    vec3 sEdVIEW = vec3(sqrt(fields[index].u*fields[index].u+fields[index].v*fields[index].v),fields[index].E / 50.0,fields[index].d/2.0);
+    vec3 velocityVIEW = vec3(fields[index].u/10.0,0,fields[index].v/10.0);
+    vec3 uVIEW = vec3(fields[index].u/10.0,0,-fields[index].u/1.5);
+    vec3 vVIEW = vec3(fields[index].v/1.5,0,-fields[index].v/1.5);
 
-    value.x = sqrt(fields[index].u*fields[index].u+fields[index].v*fields[index].v);
-    value.y = fields[index].E / 50.0;
-    value.z = fields[index].d/2.0;
-    imageStore(imgOutput, coords, value);
-}
+    debug[index].f2d.d = fields[index].d;
+    debug[index].f2d.u = fields[index].u;
+    debug[index].f2d.v = fields[index].v;
+    debug[index].f2d.E = fields[index].E;
+    debug[index].f2d.S = fields[index].S;
+
+    ///TODO: IMPROVE VORTICITY CALCULATIONS TS LOWK LAZY AND UNOPTIMIZED
+    vec4 DV = Dv(coords.x,coords.y);
+    vec3 vorticityVIEW = vec3(DV.z-DV.y,0,-(DV.z-DV.y));
+    imageStore(imgOutput, coords, vec4(uVIEW,1.0));
+} 
 
