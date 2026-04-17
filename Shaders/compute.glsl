@@ -83,9 +83,13 @@ layout (std430, binding = 3) buffer out_data {
     Fields2D[] outFields;
 };
 
-layout (std430, binding = 4) buffer out_debug {
-    DebugThing[] debug;
+layout (std430, binding = 4) buffer mesh_data {
+    int[] mesh;
 };
+
+//layout (std430, binding = 5) buffer out_debug {
+//    DebugThing[] debug;
+//};
 
 uint coordToIndex(int i, int j) {
     return i*gl_NumWorkGroups.y+j;
@@ -111,7 +115,7 @@ float BC(int valId, int i, int j, int iOffset, int jOffset) {
                 return 0;  
             //e
             case 3:
-                return 0.718 * 30.0 + 0.5 * (25);
+                return 0.718 * 30.0 + 0.5 * (5*5);
             //S 
             case 4:
                 return fields[newIndex].S;
@@ -141,13 +145,13 @@ float BC(int valId, int i, int j, int iOffset, int jOffset) {
                 return fields[newIndex].d;
             //u
             case 1:
-                return 0;
+                return 5;
             //v
             case 2:
                 return 0;
             //e
             case 3:
-                return fields[newIndex].E - 0.5 * (fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v);
+                return fields[newIndex].E - 0.5 * (fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v) + 0.5 * (5*5);
             //S 
             case 4:
                 return fields[newIndex].S;
@@ -159,13 +163,13 @@ float BC(int valId, int i, int j, int iOffset, int jOffset) {
                 return fields[newIndex].d;
             //u
             case 1:
-                return 0;
+                return 5;
             //v
             case 2:
                 return 0;
             //e
             case 3:
-                return fields[newIndex].E - 0.5 * (fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v);
+                return fields[newIndex].E - 0.5 * (fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v) + 0.5 * (5*5);
             //S 
             case 4:
                 return fields[newIndex].S;
@@ -355,6 +359,36 @@ float QUICK(int valId, int dim, bool forwards) {
     }
 }
 
+float FOU(int valId, int dim, bool forwards) {
+    if (dim == 0) {
+        switch (valId) {
+            case 0:
+                return fields[index].u >= 0 ? (forwards ? fields[index].d : BC(0,coords.x,coords.y,-1,0)) : (forwards ? BC(0,coords.x,coords.y,1,0) : fields[index].d);
+            case 1:
+                return fields[index].u >= 0 ? (forwards ? fields[index].u : BC(1,coords.x,coords.y,-1,0)) : (forwards ? BC(1,coords.x,coords.y,1,0) : fields[index].u);
+            case 2:
+                return fields[index].u >= 0 ? (forwards ? fields[index].v : BC(2,coords.x,coords.y,-1,0)) : (forwards ? BC(2,coords.x,coords.y,1,0) : fields[index].v);
+            case 3:
+                return fields[index].u >= 0 ? (forwards ? fields[index].E : BC(3,coords.x,coords.y,-1,0)) : (forwards ? BC(3,coords.x,coords.y,1,0) : fields[index].E);
+            case 4:
+                return fields[index].u >= 0 ? (forwards ? fields[index].S : BC(4,coords.x,coords.y,-1,0)) : (forwards ? BC(4,coords.x,coords.y,1,0) : fields[index].S);
+        }
+    } else {
+        switch (valId) {
+            case 0:
+                return fields[index].v >= 0 ? (forwards ? fields[index].d : BC(0,coords.x,coords.y,0,-1)) : (forwards ? BC(0,coords.x,coords.y,0,1) : fields[index].d);
+            case 1:
+                return fields[index].v >= 0 ? (forwards ? fields[index].u : BC(1,coords.x,coords.y,0,-1)) : (forwards ? BC(1,coords.x,coords.y,0,1) : fields[index].u);
+            case 2:
+                return fields[index].v >= 0 ? (forwards ? fields[index].v : BC(2,coords.x,coords.y,0,-1)) : (forwards ? BC(2,coords.x,coords.y,0,1) : fields[index].v);
+            case 3:
+                return fields[index].v >= 0 ? (forwards ? fields[index].E : BC(3,coords.x,coords.y,0,-1)) : (forwards ? BC(3,coords.x,coords.y,0,1) : fields[index].E);
+            case 4:
+                return fields[index].v >= 0 ? (forwards ? fields[index].S : BC(4,coords.x,coords.y,0,-1)) : (forwards ? BC(4,coords.x,coords.y,0,1) : fields[index].S);
+        }
+    }
+}
+
 float vanLeer(float r) {
     return (r+abs(r))/(1.0+abs(r));
 }
@@ -362,7 +396,7 @@ float vanLeer(float r) {
 float QUICKLIM(int valId, int dim, bool forwards) {
     int i = int(coords.x);
     int j = int(coords.y);
-    float FL = CD(valId, dim, forwards);
+    float FL = FOU(valId, dim, forwards);
     float FH = QUICK(valId, dim, forwards);
     float r;
     if (dim==0) {
@@ -405,38 +439,8 @@ float QUICKLIM(int valId, int dim, bool forwards) {
     return FL+vanLeer(r)*(FH-FL);
 }
 
-float FOU(int valId, int dim, bool forwards) {
-    if (dim == 0) {
-        switch (valId) {
-            case 0:
-                return fields[index].u >= 0 ? (forwards ? fields[index].d : BC(0,coords.x,coords.y,-1,0)) : (forwards ? BC(0,coords.x,coords.y,1,0) : fields[index].d);
-            case 1:
-                return fields[index].u >= 0 ? (forwards ? fields[index].u : BC(1,coords.x,coords.y,-1,0)) : (forwards ? BC(1,coords.x,coords.y,1,0) : fields[index].u);
-            case 2:
-                return fields[index].u >= 0 ? (forwards ? fields[index].v : BC(2,coords.x,coords.y,-1,0)) : (forwards ? BC(2,coords.x,coords.y,1,0) : fields[index].v);
-            case 3:
-                return fields[index].u >= 0 ? (forwards ? fields[index].E : BC(3,coords.x,coords.y,-1,0)) : (forwards ? BC(3,coords.x,coords.y,1,0) : fields[index].E);
-            case 4:
-                return fields[index].u >= 0 ? (forwards ? fields[index].S : BC(4,coords.x,coords.y,-1,0)) : (forwards ? BC(4,coords.x,coords.y,1,0) : fields[index].S);
-        }
-    } else {
-        switch (valId) {
-            case 0:
-                return fields[index].v >= 0 ? (forwards ? fields[index].d : BC(0,coords.x,coords.y,0,-1)) : (forwards ? BC(0,coords.x,coords.y,0,1) : fields[index].d);
-            case 1:
-                return fields[index].v >= 0 ? (forwards ? fields[index].u : BC(1,coords.x,coords.y,0,-1)) : (forwards ? BC(1,coords.x,coords.y,0,1) : fields[index].u);
-            case 2:
-                return fields[index].v >= 0 ? (forwards ? fields[index].v : BC(2,coords.x,coords.y,0,-1)) : (forwards ? BC(2,coords.x,coords.y,0,1) : fields[index].v);
-            case 3:
-                return fields[index].v >= 0 ? (forwards ? fields[index].E : BC(3,coords.x,coords.y,0,-1)) : (forwards ? BC(3,coords.x,coords.y,0,1) : fields[index].E);
-            case 4:
-                return fields[index].v >= 0 ? (forwards ? fields[index].S : BC(4,coords.x,coords.y,0,-1)) : (forwards ? BC(4,coords.x,coords.y,0,1) : fields[index].S);
-        }
-    }
-}
-
 float Scheme(int valId, int dim, bool forwards) {
-    return QUICKLIM(valId,dim,forwards);
+    return FOU(valId,dim,forwards);
 }
 
 
@@ -473,20 +477,26 @@ void main() {
     float dYF = Scheme(0,1,true);
     float dYB = Scheme(0,1,false);
 
-    float uXF = Scheme(1,0,true);
-    float uXB = Scheme(1,0,false);
-    float uYF = Scheme(1,1,true);
-    float uYB = Scheme(1,1,false);
+    //Rhie Chow
+    float RCXF = 0.5 * (dt/dXF)*((p.right-p.center)/dx);
+    float RCXB = 0.5 * (dt/dXB)*((p.center-p.left)/dx);
+    float RCYF = 0.5 * (dt/dYF)*((p.up-p.center)/dx);
+    float RCYB = 0.5 * (dt/dYB)*((p.center-p.down)/dx);
+
+    float uXF = Scheme(1,0,true) - RCXF;
+    float uXB = Scheme(1,0,false) - RCXB;
+    float uYF = Scheme(1,1,true) - RCYF;
+    float uYB = Scheme(1,1,false) - RCYB;
 
     float uXFC = CD(1,0,true);
     float uXBC = CD(1,0,false);
     float uYFC = CD(1,1,true);
     float uYBC = CD(1,1,false);
 
-    float vXF = Scheme(2,0,true);
-    float vXB = Scheme(2,0,false);
-    float vYF = Scheme(2,1,true);
-    float vYB = Scheme(2,1,false);
+    float vXF = Scheme(2,0,true) - RCXF;
+    float vXB = Scheme(2,0,false) - RCXB;
+    float vYF = Scheme(2,1,true) - RCYF;
+    float vYB = Scheme(2,1,false) - RCYB;
 
     float vXFC = CD(2,0,true);
     float vXBC = CD(2,0,false);
@@ -508,9 +518,9 @@ void main() {
     float SDyYF = (SGrad.center.y + SGrad.up.y)/2.0;
     float SDyYB = (SGrad.center.y + SGrad.down.y)/2.0;
 
-    float pressureToggle = 1.0;
+    float pressureToggle = 0.0;
 
-    if ((coords.x-0.25*width)*(coords.x-0.25*width)+(coords.y-0.5*height)*(coords.y-0.5*height) < (width*1.0/30.0)*(width*1.0/30.0) && true) {
+    if ((coords.x-0.25*width)*(coords.x-0.25*width)+(3*(coords.y-0.5*height))*(3*(coords.y-0.5*height)) < (width*1.0/30.0)*(width*1.0/10.0) && true) {
         outFields[index].d = fields[index].d;
         outFields[index].u = 0;
         outFields[index].v = 0;
@@ -532,19 +542,13 @@ void main() {
 
     vec3 SVIEW = hsv2rgb(vec3(fields[index].S*0.75,1.0,1.0));
     vec3 sEdVIEW = vec3(sqrt(fields[index].u*fields[index].u+fields[index].v*fields[index].v),fields[index].E / 50.0,fields[index].d/2.0);
-    vec3 velocityVIEW = vec3(fields[index].u/10.0,0,fields[index].v/10.0);
-    vec3 uVIEW = vec3(fields[index].u/10.0,0,-fields[index].u/1.5);
+    vec3 velocityVIEW = vec3(fields[index].u/8.0,0,mesh[index]);
+    vec3 uVIEW = vec3(fields[index].u/32.0,0,-fields[index].u/1.5);
     vec3 vVIEW = vec3(fields[index].v/1.5,0,-fields[index].v/1.5);
-
-    debug[index].f2d.d = fields[index].d;
-    debug[index].f2d.u = fields[index].u;
-    debug[index].f2d.v = fields[index].v;
-    debug[index].f2d.E = fields[index].E;
-    debug[index].f2d.S = fields[index].S;
 
     ///TODO: IMPROVE VORTICITY CALCULATIONS TS LOWK LAZY AND UNOPTIMIZED
     vec4 DV = Dv(coords.x,coords.y);
     vec3 vorticityVIEW = vec3(DV.z-DV.y,0,-(DV.z-DV.y));
-    imageStore(imgOutput, coords, vec4(uVIEW,1.0));
+    imageStore(imgOutput, coords, vec4(velocityVIEW,1.0));
 } 
 
