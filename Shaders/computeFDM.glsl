@@ -89,9 +89,9 @@ layout (std430, binding = 4) buffer mesh_data {
     int[] mesh;
 };
 
-//layout (std430, binding = 5) buffer out_debug {
- //   DebugThing[] debug;
-//};
+layout (std430, binding = 5) buffer out_debug {
+    DebugThing[] debug;
+};
 
 layout (std430, binding = 6) buffer prevData {
     Fields2D[] prevFields;
@@ -133,13 +133,13 @@ float BC(int valId, int i, int j, int iOffset, int jOffset) {
                 return 1.293;
             //u
             case 1:
-                return 3.0;
+                return 100;
             //v
             case 2:
                 return 0;  
             //e
             case 3:
-                return fields[newIndex].E - 0.5 * (fields[newIndex].u*fields[newIndex].u + fields[newIndex].v*fields[newIndex].v) + 0.5 * 9.0;
+                return 0.718 * 30.0 + 0.5 * (100*100);
             //S 
             case 4:
                 return fields[newIndex].S;
@@ -169,13 +169,13 @@ float BC(int valId, int i, int j, int iOffset, int jOffset) {
                 return fields[newIndex].d;
             //u
             case 1:
-                return fields[newIndex].u;
+                return 100;
             //v
             case 2:
-                return fields[newIndex].v;
+                return 0;
             //e
             case 3:
-                return fields[newIndex].E;
+                return fields[newIndex].E - 0.5 * (fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v) + 0.5 * (100*100);
             //S 
             case 4:
                 return fields[newIndex].S;
@@ -187,13 +187,13 @@ float BC(int valId, int i, int j, int iOffset, int jOffset) {
                 return fields[newIndex].d;
             //u
             case 1:
-                return fields[newIndex].u;
+                return 100;
             //v
             case 2:
-                return fields[newIndex].v;
+                return 0;
             //e
             case 3:
-                return fields[newIndex].E;
+                return fields[newIndex].E - 0.5 * (fields[newIndex].u*fields[newIndex].u+fields[newIndex].v*fields[newIndex].v) + 0.5 * (100*100);
             //S 
             case 4:
                 return fields[newIndex].S;
@@ -352,11 +352,11 @@ float SOU(int valId, int dim, bool forwards)
 
     if (dim == 0)
     {
-        return forwards ? ((BC(1,i,j,0,0) >= 0) ? BC(valId,i,j,0,0) + (BC(valId,i,j,0,0) - BC(valId,i,j,-1,0)) / 2.0 : BC(valId,i,j,1,0) - (BC(valId,i,j,1,0) - BC(valId,i,j,0,0)) / 2.0)
+        return forwards ? ((BC(1,i,j,0,0) < 0) ? BC(valId,i,j,0,0) + (BC(valId,i,j,0,0) - BC(valId,i,j,-1,0)) / 2.0 : BC(valId,i,j,1,0) - (BC(valId,i,j,1,0) - BC(valId,i,j,0,0)) / 2.0)
             : (BC(1,i,j,0,0) < 0 ? BC(valId,i,j,-1,0) + (BC(valId,i,j,-1,0)-BC(valId,i,j,-2,0)) /2.0 : BC(valId,i,j,0,0) - (BC(valId,i,j,0,0) - BC(valId,i,j,-1,0)) / 2.0);
     } else
     {
-        return forwards ? ((BC(2,i,j,0,0) >= 0) ? BC(valId,i,j,0,0) + (BC(valId,i,j,0,0) - BC(valId,i,j,0,-1)) / 2.0 : BC(valId,i,j,0,1) - (BC(valId,i,j,0,1) - BC(valId,i,j,0,0)) / 2.0)
+        return forwards ? ((BC(2,i,j,0,0) < 0) ? BC(valId,i,j,0,0) + (BC(valId,i,j,0,0) - BC(valId,i,j,0,-1)) / 2.0 : BC(valId,i,j,0,1) - (BC(valId,i,j,0,1) - BC(valId,i,j,0,0)) / 2.0)
             : (BC(2,i,j,0,0) < 0 ? BC(valId,i,j,0,-1) + (BC(valId,i,j,0,-1)-BC(valId,i,j,0,-2)) /2.0 : BC(valId,i,j,0,0) - (BC(valId,i,j,0,0) - BC(valId,i,j,0,-1)) / 2.0);
     }
 }
@@ -462,7 +462,7 @@ float WENO(int valId, int dim, bool forwards) {
         float b32 = (3.0 * BC(valId,i,j,0,forwards?0:-1) - 4.0 * BC(valId,i,j,0,forwards?1:0) + BC(valId,i,j,0,forwards?2:1));
         b3 = (13.0/12.0) * b31*b31 + (1.0/4.0) * b32*b32;
     }
-    a1 = (1.0/(10.0 * (b1+0.1)*(b1+0.1)));
+    a1 = (1/(10.0 * (b1+0.1)*(b1+0.1)));
     a2 = (6.0/(10.0 * (b2+0.1)*(b2+0.1)));
     a3 = (3.0/(10.0 * (b3+0.1)*(b3+0.1)));
     float aSUM = a1+a2+a3;
@@ -507,7 +507,7 @@ float WENOLIM(int valId, int dim, bool forwards) {
 }
 
 float Scheme(int valId, int dim, bool forwards) {
-    return WENOLIM(valId,dim,forwards);
+    return FOU(valId,dim,forwards);
 }
 
 
@@ -550,7 +550,7 @@ void main() {
     float RCYF = 0.5 * (dt/dYF)*((p.up-p.center)/dx);
     float RCYB = 0.5 * (dt/dYB)*((p.center-p.down)/dx);
 
-    float rhieChowToggle = 1.0;
+    float rhieChowToggle = -1.0;
 
     float uXF = Scheme(1,0,true) + rhieChowToggle * RCXF;
     float uXB = Scheme(1,0,false) + rhieChowToggle * RCXB;
@@ -595,7 +595,7 @@ void main() {
         outFields[index].v = 0;
         outFields[index].E = 0;
         outFields[index].S = 0;
-    } else if (true) {
+    } else if (false) {
         outFields[index].d = fields[index].d + dt * (-(dXF * uXF - dXB * uXB) / dx - (dYF * vYF - dYB * vYB) / dy);
         outFields[index].u = fields[index].u + (1.0 / fields[index].d) * dt * (-((dXF * uXF * uXF + pressureToggle * pXFC) - (dXB * uXB * uXB + pressureToggle * pXBC)) / dx -
                             (dYF * uYF * vYF - dYB * uYB * vYB) / dy + (TxxXF - TxxXB) / dx + (TxyYF - TxyYB) / dy);
@@ -622,19 +622,19 @@ void main() {
     }
 
     vec3 SVIEW = hsv2rgb(vec3(fields[index].S*0.75,1.0,1.0));
-    vec3 sEdVIEW = vec3(sqrt(outFields[index].u*outFields[index].u+outFields[index].v*outFields[index].v)/3.0,outFields[index].E / 50.0,outFields[index].d/2.5);
-    vec3 velocityVIEW = vec3(abs(outFields[index].u/2.0),0,abs(outFields[index].v)/1.0);
+    vec3 sEdVIEW = vec3(sqrt(outFields[index].u*outFields[index].u+outFields[index].v*outFields[index].v)/150.0,outFields[index].E / 5000.0,outFields[index].d/2.5);
+    vec3 velocityVIEW = vec3(abs(outFields[index].u/150.0),0,abs(outFields[index].v)/15.0);
     vec3 uVIEW = vec3(fields[index].u/120.0,0,-fields[index].u/4.0);
     vec3 vVIEW = vec3(fields[index].v/10.0,0,-fields[index].v/10.0);
 
-   // debug[index].f2d = mesh[index];
+    debug[index].f2d = mesh[index];
 
     ///TODO: IMPROVE VORTICITY CALCULATIONS TS LOWK LAZY AND UNOPTIMIZED
     vec4 DV = Dv(coords.x,coords.y);
     vec3 vorticityVIEW = vec3(DV.z-DV.y,0,-(DV.z-DV.y));
-    imageStore(imgOutput, coords, vec4(velocityVIEW,1.0));
+    imageStore(imgOutput, coords, vec4(uVIEW,1.0));
     if (mesh[index] == 1) {
-        imageStore(imgOutput, coords, vec4(velocityVIEW,1.0));
+        imageStore(imgOutput, coords, vec4(SVIEW,1.0));
     }
 } 
 
