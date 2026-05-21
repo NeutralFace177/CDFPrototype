@@ -72,6 +72,16 @@ namespace CFDPrototype.util
         }
 
     }
+    struct IncompField2D
+    {
+        public float u;
+        public float v;
+        public IncompField2D(float u, float v)
+        {
+            this.u = u;
+            this.v = v;
+        }
+    }
 
     struct Cell3D
     {
@@ -200,6 +210,22 @@ namespace CFDPrototype.util
                 }
             }
         }
+        public void StoreGrid(IncompField2D[,] field, int[,] mesh)
+        {
+            for (int i = 0; i < width; i++)
+            {
+                for (int j = 0; j < height; j++)
+                {
+                    field[i, j].u = u[i, j];
+                    field[i, j].v = v[i, j];
+                    if (Math.Pow((i + 0.15 * width) - 0.5f * width, 2) + Math.Pow(3 * (j - 0.5f * height), 2) < Math.Pow((1.0f / 6.0f) * width, 2))
+                    {
+                        mesh[i, j] = 1;
+                    }
+                }
+            }
+        }
+
 
         //1st order central diff
         float CD(float[,] field, int i, int j, VT valId, Dim dim, bool forwards)
