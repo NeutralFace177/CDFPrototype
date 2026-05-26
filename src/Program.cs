@@ -167,7 +167,7 @@ public class Window : GameWindow
     IncompOutData[,] incompOutData;
     IncompField2D[,] incompOutFields;
     //byte array as its currently only a mask
-    int[,] compShaderMeshData;
+    MeshData[,] compShaderMeshData;
     Field2D sigmaa;
     int ssbo;
     int ssbo1;
@@ -218,13 +218,14 @@ public class Window : GameWindow
         incompField2D = new IncompField2D[gWidth, gHeight];
         incompOutData = new IncompOutData[gWidth, gHeight];
         incompOutFields = new IncompField2D[gWidth, gHeight];
-        compShaderMeshData = new int[gWidth, gHeight];
+        compShaderMeshData = new MeshData[gWidth, gHeight];
         if (debugSSBOEnabled)
         {
             compShaderDebugData = new DebugThing[gWidth, gHeight];
         }
         sigmaa = new Field2D(0.1f, 0.2f, 0.3f, 0.4f, 0.5f);
-        grid.StoreGrid(compShaderDataIn, compShaderMeshData);
+        /// TODO FIX/IMPLEMENT COMPRESSIBLE MESH DATA & STORE GRID
+        //grid.StoreGrid(compShaderDataIn, compShaderMeshData);
         grid.StoreGrid(incompField2D, compShaderMeshData);
         simState = SimState.Paused;
         proc = Processor.GPU;
@@ -347,9 +348,9 @@ public class Window : GameWindow
         GL.BindBuffer(BufferTarget.ShaderStorageBuffer, ssbo2);
         unsafe
         {
-            fixed (int* ptr2 = &compShaderMeshData[0,0])
+            fixed (MeshData* ptr2 = &compShaderMeshData[0,0])
             {
-                GL.BufferData(BufferTarget.ShaderStorageBuffer, compShaderMeshData.Length * sizeof(int), (IntPtr)ptr2, BufferUsageHint.DynamicRead);
+                GL.BufferData(BufferTarget.ShaderStorageBuffer, compShaderMeshData.Length * sizeof(MeshData), (IntPtr)ptr2, BufferUsageHint.DynamicRead);
                 GL.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, 4, ssbo2);
                 GL.BindBuffer(BufferTarget.ShaderStorageBuffer, 0);
             }
@@ -388,7 +389,7 @@ public class Window : GameWindow
             GL.BindBuffer(BufferTarget.ShaderStorageBuffer, ssbo5);
             unsafe
             {
-                GL.BufferData(BufferTarget.ShaderStorageBuffer, gWidth * gHeight * sizeof(double), IntPtr.Zero, BufferUsageHint.DynamicRead);
+                GL.BufferData(BufferTarget.ShaderStorageBuffer, (compShaderMeshData[gWidth-1,gHeight-1].reindex+1) * sizeof(double), IntPtr.Zero, BufferUsageHint.DynamicRead);
                 GL.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, 7, ssbo5);
                 GL.BindBuffer(BufferTarget.ShaderStorageBuffer, 0);
             }
@@ -563,92 +564,58 @@ public class Window : GameWindow
                 GL.BindBuffer(BufferTarget.ShaderStorageBuffer, 0);
                 alglib.sparsematrix A = new();
                 alglib.xparams xparams = new(0);
-                alglib.sparsecreatecrsempty(gWidth*gHeight, out A, xparams);
-                double[] b = new double[gWidth*gHeight];
+                alglib.sparsecreatecrsempty(compShaderMeshData[gWidth-1,gHeight-1].reindex+1, out A, xparams);
+                double[] b = new double[compShaderMeshData[gWidth - 1, gHeight - 1].reindex + 1
+                    
+                    ];
+                System.Diagnostics.Stopwatch stopwatch = new System.Diagnostics.Stopwatch();
+                Console.WriteLine("Building Matrix");
+                stopwatch.Start();
+                bool[] bndry = new bool[4];
+                int[] indices = new int[5];
+                double[] vals = new double[5];
                 for (int i = 0; i < gWidth; i++)
                 {
                     for (int j = 0; j < gHeight; j++)
                     {
-                        IncompOutData data = incompOutData[i, j];
-                        double[] vals;
-                        int[] indices;
-                        int centerIndex = j + i * gHeight;
-
-                        if (i == 0)
+                        if (compShaderMeshData[i, j].obj == 1)
                         {
-                            if (j == 0)
-                            {
-                                //c,n,e
-                                indices = new int[3] { centerIndex, centerIndex + 1, centerIndex + gHeight };
-                                vals = new double[3] { data.a_c + data.a_x + data.a_y, data.a_y, data.a_x};
-                                b[j + i * gHeight] = 0;
-                            } else if  (j == gHeight-1)
-                            {
-                                //s,c,e
-                                indices = new int[3] { centerIndex - 1, centerIndex, centerIndex + gHeight };
-                                vals = new double[3] { data.a_y, data.a_c + data.a_x + data.a_y, data.a_x };
-                                b[j + i * gHeight] = 0;
-                            } else
-                            {
-                                //s,c,n,e
-                                indices = new int[4] {centerIndex - 1, centerIndex, centerIndex + 1, centerIndex + gHeight };
-                                vals = new double[4] { data.a_y, data.a_c + data.a_x, data.a_y, data.a_x };
-                                b[j + i * gHeight] = (incompOutData[i, j + 1].v - incompOutData[i, j - 1].v) / (2f * ssInfo2.dy); //-a_x * 0 * dx
-                            }
-                        } else if (i == gWidth-1)
-                        {
-                            if (j == 0)
-                            {
-                                //w,c,n
-                                indices = new int[3] { centerIndex - gHeight, centerIndex, centerIndex + 1 };
-                                vals = new double[3] { data.a_x, data.a_c + data.a_x + data.a_y, data.a_y };
-                                b[j + i * gHeight] = 0;
-                            }
-                            else if (j == gHeight - 1)
-                            {
-                                //w,s,c
-                                indices = new int[3] { centerIndex - gHeight, centerIndex - 1, centerIndex };
-                                vals = new double[3] { data.a_x, data.a_y, data.a_c + data.a_x + data.a_y };
-                                b[j + i * gHeight] = 0;
-                            }
-                            else
-                            {
-                                //w,s,c,n
-                                indices = new int[4] { centerIndex - gHeight, centerIndex - 1, centerIndex, centerIndex + 1};
-                                vals = new double[4] { data.a_x, data.a_y, data.a_c + data.a_x, data.a_y };
-                                b[j + i * gHeight] = (incompOutData[i, j + 1].v - incompOutData[i, j - 1].v) / (2f * ssInfo2.dy); //-a_x * 0 * dx
-                            }
-                        } else
-                        {
-                            if (j == 0)
-                            {
-                                //w,c,n,e
-                                indices = new int[4] { centerIndex - gHeight, centerIndex, centerIndex+1, centerIndex + gHeight };
-                                vals = new double[4] { data.a_x, data.a_c + data.a_y, data.a_y, data.a_x };
-                                b[j + i * gHeight] = (incompOutData[i + 1, j].u - incompOutData[i - 1, j].u) / (2f * ssInfo2.dx); //+a_y * 0 * dy
-                            }
-                            else if (j == gHeight - 1)
-                            {
-                                //w,s,c,e
-                                indices = new int[4] { centerIndex - gHeight, centerIndex - 1, centerIndex, centerIndex + gHeight };
-                                vals = new double[4] { data.a_x, data.a_y, data.a_c + data.a_y, data.a_x };
-                                b[j + i * gHeight] = (incompOutData[i + 1, j].u - incompOutData[i - 1, j].u) / (2f * ssInfo2.dx); //-a_y * 0 * dy
-                            }
-                            else
-                            {
-                                //w,s,c,n,e
-                                indices = new int[5] { centerIndex - gHeight, centerIndex - 1, centerIndex, centerIndex + 1, centerIndex + gHeight };
-                                vals = new double[5] { data.a_x, data.a_y, data.a_c, data.a_y, data.a_x };
-                                b[j + i * gHeight] = (incompOutData[i + 1, j].u - incompOutData[i-1,j].u)/(2f*ssInfo2.dx) + (incompOutData[i, j + 1].v - incompOutData[i,j-1].v)/(2f*ssInfo2.dy);
-                            }
+                            continue;
                         }
-                        
-                        alglib.sparseappendcompressedrow(A, indices, vals, indices.Length, new alglib.xparams(0));
+                        IncompOutData data = incompOutData[i, j];
+                        int centerIndex = compShaderMeshData[i, j].reindex;
+                        indices[0] = centerIndex;
+                        vals[0] = data.a_c;
+                        bndry[0] = i == (gWidth-1) ? true : (compShaderMeshData[i + 1, j].obj == 1);
+                        bndry[1] = i == 0 ? true : (compShaderMeshData[i - 1, j].obj == 1);
+                        bndry[2] = j == (gHeight-1) ? true : (compShaderMeshData[i, j + 1].obj == 1);
+                        bndry[3] = j == 0 ? true : (compShaderMeshData[i, j - 1].obj == 1);
+
+                        indices[1] = bndry[0] ? centerIndex : compShaderMeshData[i + 1, j].reindex;
+                        vals[1] = data.a_x;
+                        indices[2] = bndry[1] ? centerIndex : compShaderMeshData[i - 1, j].reindex;
+                        vals[2] = data.a_x;
+                        indices[3] = bndry[2] ? centerIndex : compShaderMeshData[i, j + 1].reindex;
+                        vals[3] = data.a_y;
+                        indices[4] = bndry[3] ? centerIndex : compShaderMeshData[i, j - 1].reindex;
+                        vals[4] = data.a_y;
+                        b[centerIndex] = (!(bndry[0] || bndry[1]) ? (incompOutData[i + 1, j].u - incompOutData[i - 1, j].u) / (2f * ssInfo2.dx) : 0) +
+                                (!(bndry[2] || bndry[3]) ? (incompOutData[i, j + 1].v - incompOutData[i, j - 1].v) / (2f * ssInfo2.dy) : 0);
+
+                            alglib.sparseappendcompressedrow(A, indices, vals, indices.Length, new alglib.xparams(0));
                     }
                 }
+                Console.WriteLine(stopwatch.ElapsedMilliseconds);
+                Console.WriteLine("Solving LinEq");
                 //alglib.sparsesolve(A, b, 0, out double[] solvedP, out alglib.sparsesolverreport report);
-                alglib.sparsesolvegmres(A, b, 200, 0.01f, 1000, out double[] solvedP, out alglib.sparsesolverreport report);
+                //alglib.sparsesolvegmres(A, b, 100, 0.05f, 500, out double[] solvedP, out alglib.sparsesolverreport report);
+
+                alglib.lincgcreate(compShaderMeshData[gWidth-1,gHeight-1].reindex+1, out alglib.lincgstate state);
+                alglib.lincgsetcond(state, 0.05d, 500);
+                alglib.lincgsolvesparse(state, A, true, b);
+                alglib.lincgresults(state, out double[] solvedP, out alglib.lincgreport report);
                 Console.WriteLine("itr:" + report.iterationscount + " r2:" + report.r2 + " t:" + report.terminationtype + " nmv:" + report.nmv);
+                Console.WriteLine(stopwatch.ElapsedMilliseconds);
                 Console.WriteLine(incompOutData[200, 200].a_c);
                 GL.BindBuffer(BufferTarget.ShaderStorageBuffer, ssbo5);
                 IntPtr mapPTR = GL.MapBuffer(BufferTarget.ShaderStorageBuffer, BufferAccess.WriteOnly);
@@ -709,10 +676,10 @@ public class Window : GameWindow
                 GL.BindBuffer(BufferTarget.ShaderStorageBuffer, ssbo2);
                 unsafe
                 {
-                    fixed (int* ptr3 = &compShaderMeshData[0, 0])
+                    fixed (MeshData* ptr3 = &compShaderMeshData[0, 0])
                     {
                         IntPtr ptrH = GL.MapBuffer(BufferTarget.ShaderStorageBuffer, BufferAccess.WriteOnly);
-                        System.Buffer.MemoryCopy(ptr3, ptrH.ToPointer(), compShaderMeshData.Length * sizeof(int), compShaderMeshData.Length * sizeof(int));
+                        System.Buffer.MemoryCopy(ptr3, ptrH.ToPointer(), compShaderMeshData.Length * sizeof(MeshData), compShaderMeshData.Length * sizeof(MeshData));
                         GL.UnmapBuffer(BufferTarget.ShaderStorageBuffer);
                     }
                 }

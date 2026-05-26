@@ -34,6 +34,10 @@ struct OutData {
     float a_c;
 };
 
+struct MeshData {
+    int obj;
+    int reindex;
+};
 
 struct coordIndexPair {
     int i;
@@ -97,7 +101,7 @@ layout (std430, binding = 3) buffer out_data {
 };
 
 layout (std430, binding = 4) buffer mesh_data {
-    int[] mesh;
+    MeshData[] mesh;
 };
 
 //layout (std430, binding = 5) buffer out_debug {
@@ -120,9 +124,10 @@ uint index = coordToIndex(coords.x, coords.y);
 iDataGroup4 indices = iDataGroup4(coordToIndex(coords.x+1,coords.y),coordToIndex(coords.x-1,coords.y),coordToIndex(coords.x,coords.y+1),coordToIndex(coords.x,coords.y-1));
 
 float BC(int iOffset, int jOffset) {
-    uint newIndex = coordToIndex(int(clamp(i+iOffset,0,int(width-1))),int(clamp(j+jOffset,0,int(height-1))));
+    uint newIndex= coordToIndex(int(clamp(i+iOffset,0,int(width-1))),int(clamp(j+jOffset,0,int(height-1))));
+    uint reindex = mesh[newIndex].reindex;
     bool objectFlag = false;
-    if (mesh[newIndex] == 1) {
+    if (mesh[newIndex].obj == 1) {
         newIndex = coordToIndex(i,j);
         objectFlag = true;
     }
@@ -137,20 +142,20 @@ float BC(int iOffset, int jOffset) {
     } else if (j+jOffset >= height) {
         return 0;
     } else {
-        return float(pressure[newIndex]);
+        return float(pressure[reindex]);
     }
 }
 
 void main() {
-    if (mesh[index] == 1) {
+    if (mesh[index].obj == 1) {
         outFields[index].u = 0;
         outFields[index].v = 0;
     } else {
         outFields[index].u = float(outData[index].u) - (dt/d) * (BC(1,0)-BC(-1,0))/(2*dx);
         outFields[index].v = float(outData[index].v) - (dt/d) * (BC(0,1)-BC(0,-1))/(2*dy);
     }
-    vec3 VP = vec3(abs(outFields[index].u/70.0),log(float(pressure[index]))/15.0,abs(outFields[index].v)/6.0);
-    vec3 prVIEW = vec3(log(float(pressure[index]))/10);
+    vec3 VP = vec3(abs(outFields[index].u/70.0),float(BC(0,0)),abs(outFields[index].v)/6.0);
+    vec3 prVIEW = vec3(float(BC(0,0)),-float(BC(0,0))/15.0,0.0);
     vec3 velocityVIEW = vec3(abs(outFields[index].u/70.0),0,abs(outFields[index].v)/6.0);
     imageStore(imgOutput, coords, vec4(prVIEW,1.0));
 } 

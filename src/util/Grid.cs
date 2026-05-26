@@ -83,6 +83,17 @@ namespace CFDPrototype.util
         }
     }
 
+    struct MeshData
+    {
+        public int obj;
+        public int reindex;
+        public MeshData(int o, int r)
+        {
+            obj = o;
+            reindex = r;
+        }
+    }
+
     struct Cell3D
     {
         int[] vertexIndices;
@@ -210,8 +221,9 @@ namespace CFDPrototype.util
                 }
             }
         }
-        public void StoreGrid(IncompField2D[,] field, int[,] mesh)
+        public void StoreGrid(IncompField2D[,] field, MeshData[,] mesh)
         {
+            int indxCtr = 0;
             for (int i = 0; i < width; i++)
             {
                 for (int j = 0; j < height; j++)
@@ -220,8 +232,11 @@ namespace CFDPrototype.util
                     field[i, j].v = v[i, j];
                     if (Math.Pow((i + 0.15 * width) - 0.5f * width, 2) + Math.Pow(3 * (j - 0.5f * height), 2) < Math.Pow((1.0f / 6.0f) * width, 2))
                     {
-                        mesh[i, j] = 1;
+                        mesh[i, j].obj = 1;
+                        continue;
                     }
+                    mesh[i, j].reindex = indxCtr;
+                    indxCtr++;
                 }
             }
         }

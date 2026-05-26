@@ -34,6 +34,11 @@ struct Fields2D {
     float v;
 };
 
+struct MeshData {
+    int obj;
+    int reindex;
+};
+
 struct coordIndexPair {
     int i;
     int j;
@@ -88,7 +93,7 @@ layout (std430, binding = 3) buffer out_data {
 };
 
 layout (std430, binding = 4) buffer mesh_data {
-    int[] mesh;
+    MeshData[] mesh;
 };
 
 //layout (std430, binding = 5) buffer out_debug {
@@ -113,7 +118,7 @@ iDataGroup4 indices = iDataGroup4(coordToIndex(coords.x+1,coords.y),coordToIndex
 float BC(int valId, int i, int j, int iOffset, int jOffset) {
     uint newIndex = coordToIndex(int(clamp(i+iOffset,0,int(width-1))),int(clamp(j+jOffset,0,int(height-1))));
     bool objectFlag = false;
-    if (mesh[newIndex] == 1) {
+    if (mesh[newIndex].obj == 1) {
         newIndex = coordToIndex(i,j);
         objectFlag = true;
     }
@@ -187,7 +192,7 @@ float BC(int valId, int i, int j, int iOffset, int jOffset) {
 }
 
 void main() {
-    if (mesh[index] == 1) {
+    if (mesh[index].obj == 1) {
         outData[index].u = 0;
         outData[index].v = 0;
     } else {
